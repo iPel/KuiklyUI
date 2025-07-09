@@ -138,6 +138,7 @@ internal class InputMeasureDemoPage : BasePager() {
                             minWidth(ctx.pageData.pageViewWidth - 30f - 100f)
                             maxWidth(ctx.pageData.pageViewWidth - 30f)
                             minHeight(24f)
+                            lineHeight(24f)
                         }
                         event {
                             keyboardHeightChange {

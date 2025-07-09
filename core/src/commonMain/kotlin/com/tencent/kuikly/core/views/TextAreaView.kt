@@ -33,6 +33,22 @@ import com.tencent.kuikly.core.views.shadow.TextShadow
 
 open class TextAreaView : DeclarativeBaseView<TextAreaAttr, TextAreaEvent>(), MeasureFunction {
 
+    companion object {
+        private val NON_SHADOW_PROPS by lazy(LazyThreadSafetyMode.NONE) {
+            setOf(
+                Attr.StyleConst.TRANSFORM,
+                Attr.StyleConst.OPACITY,
+                Attr.StyleConst.VISIBILITY,
+                Attr.StyleConst.BACKGROUND_COLOR,
+                TextConst.TEXT_COLOR,
+                TextConst.TINT_COLOR,
+                TextConst.TEXT_SHADOW,
+                TextConst.PLACEHOLDER,
+                TextConst.PLACEHOLDER_COLOR
+            )
+        }
+    }
+
     private var shadow: TextShadow? = null
     private val remeasureObserver: InputEventHandlerFn = {
         if (getViewAttr().getProp(TextConst.VALUES) != null) {
@@ -85,20 +101,10 @@ open class TextAreaView : DeclarativeBaseView<TextAreaAttr, TextAreaEvent>(), Me
 
     override fun didSetProp(propKey: String, propValue: Any) {
         super.didSetProp(propKey, propValue)
-        if (isShadowProp(propKey)) {
+        if (propKey !in NON_SHADOW_PROPS) {
             shadow?.setProp(propKey, propValue)
             flexNode.markDirty()
         }
-    }
-
-    private fun isShadowProp(propKey: String): Boolean {
-        return !(propKey == Attr.StyleConst.TRANSFORM
-                || propKey == Attr.StyleConst.OPACITY
-                || propKey == Attr.StyleConst.VISIBILITY
-                || propKey == Attr.StyleConst.BACKGROUND_COLOR
-                || propKey == TextConst.TEXT_COLOR
-                || propKey == TextConst.TINT_COLOR
-                || propKey == TextConst.TEXT_SHADOW)
     }
 
     @Deprecated("Use TextAreaAttr#text() instead",
@@ -310,12 +316,12 @@ open class TextAreaAttr : Attr() {
     }
 
     fun placeholderColor(color: Color): TextAreaAttr {
-        "placeholderColor" with color.toString()
+        TextConst.PLACEHOLDER_COLOR with color.toString()
         return this
     }
 
     fun placeholder(placeholder: String): TextAreaAttr {
-        "placeholder" with placeholder
+        TextConst.PLACEHOLDER with placeholder
         return this
     }
 
