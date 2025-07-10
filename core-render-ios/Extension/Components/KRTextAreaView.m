@@ -151,7 +151,7 @@ NSString *const KRFontWeightKey = @"fontWeight";
 
     NSRange range = NSMakeRange(0, attrStr.length);
     [attrStr addAttribute:NSParagraphStyleAttributeName value:paragraphStyle range:range];
-    CGFloat baselineOffset = ([_css_lineHeight floatValue]  - font.lineHeight) / 2;
+    CGFloat baselineOffset = ([_css_lineHeight floatValue]  - font.pointSize) / 2;
     [attrStr addAttribute:NSBaselineOffsetAttributeName value:@(baselineOffset) range:range];
 
     self.attributedText = attrStr;
