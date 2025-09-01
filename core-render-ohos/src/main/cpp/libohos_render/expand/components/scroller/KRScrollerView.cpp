@@ -129,6 +129,23 @@ void KRScrollerView::DidInit() {
     RegisterEvent(NODE_SCROLL_EVENT_ON_SCROLL_START);
     RegisterEvent(NODE_SCROLL_EVENT_ON_WILL_SCROLL);
     RegisterEvent(NODE_SCROLL_EVENT_ON_SCROLL_STOP);
+    // 拦截长按手势，避免与滚动冲突
+    OH_ArkUI_SetTouchTestDoneCallback(GetNode(), nullptr, [](
+        ArkUI_GestureEvent* event,
+        ArkUI_GestureRecognizerHandleArray recognizers,
+        int32_t count,
+        void* userData
+    ) {
+        KR_LOG_INFO_WITH_TAG("pel") << "touch test done callback, count: " << count;
+        for (int i = 0; i < count; ++i) {
+            auto recognizer = recognizers[i];
+            auto gesture_type = kuikly::util::GetGestureApi()->getGestureType(recognizer);
+            KR_LOG_INFO_WITH_TAG("pel") << "recognizer type: " << gesture_type;
+//            if (gesture_type == LONG_PRESS_GESTURE) {
+                OH_ArkUI_PreventGestureRecognizerBegin(recognizer);
+//            }
+        }
+    });
 }
 
 bool KRScrollerView::SetProp(const std::string &prop_key, const KRAnyValue &prop_value,

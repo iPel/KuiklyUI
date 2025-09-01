@@ -38,9 +38,12 @@ import com.tencent.kuikly.core.views.Input
 import com.tencent.kuikly.core.views.InputView
 import com.tencent.kuikly.core.views.List
 import com.tencent.kuikly.core.views.ListView
+import com.tencent.kuikly.core.views.Modal
 import com.tencent.kuikly.core.views.Text
+import com.tencent.kuikly.core.views.TextArea
 import com.tencent.kuikly.core.views.View
 import com.tencent.kuikly.core.views.compose.Button
+import com.tencent.kuikly.core.views.willDismiss
 import com.tencent.kuikly.demo.pages.base.BasePager
 import com.tencent.kuikly.demo.pages.base.BridgeModule
 import com.tencent.kuikly.demo.pages.demo.base.NavBar
@@ -57,6 +60,7 @@ internal class VforLazyExamplePage : BasePager() {
     private var inputText: String? = null
     private var showPanel by observable(false)
     private var frontAdded = 0
+    private var selectedText: String by observable("")
 
     override fun created() {
         super.created()
@@ -91,8 +95,15 @@ internal class VforLazyExamplePage : BasePager() {
                         attr {
                             flexDirection(if (item.sendType == ChatItem.RECEIVE) FlexDirection.ROW else FlexDirection.ROW_REVERSE)
                             alignItemsFlexStart()
-                            margin(10f)
+                            //margin(10f)
                             padding(10f)
+                        }
+                        event {
+                            longPress {
+                                if (it.state == "start") {
+                                    ctx.selectedText = item.message
+                                }
+                            }
                         }
                         Text {
                             attr {
@@ -255,6 +266,45 @@ internal class VforLazyExamplePage : BasePager() {
                             backgroundColor(0x99EEEEEE)
                         }
                         ctx.debugPanel(this)
+                    }
+                }
+            }
+            vif ({ ctx.selectedText.isNotEmpty() }) {
+                Modal(true) {
+                    attr {
+                        allCenter()
+                        backgroundColor(Color.WHITE)
+                    }
+                    event {
+                        willDismiss {
+                            ctx.selectedText = ""
+                        }
+                    }
+                    Button {
+                        attr {
+                            absolutePosition(
+                                right = 10f,
+                                top = 10f + ctx.pagerData.statusBarHeight
+                            )
+                            size(30f, 30f)
+                            backgroundColor(0x33333333)
+                            highlightBackgroundColor(Color.GRAY)
+                            titleAttr {
+                                fontSize(20f)
+                                text("X")
+                            }
+                        }
+                        event {
+                            click {
+                                ctx.selectedText = ""
+                            }
+                        }
+                    }
+                    TextArea {
+                        attr {
+                            text(ctx.selectedText)
+                            margin(15f)
+                        }
                     }
                 }
             }
