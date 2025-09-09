@@ -13,20 +13,127 @@
  * limitations under the License.
  */
 
-#include <ark_runtime/jsvm.h>
-#include <dlfcn.h>
-#include <hilog/log.h>
-#include <multimedia/image_framework/image/image_source_native.h>
-#include <multimedia/image_framework/image/pixelmap_native.h>
-#include <thread>
-#include <memory>
-#include <string>
 #include "libohos_render/api/include/Kuikly/Kuikly.h"
 #include "napi/native_api.h"
 #include "thirdparty/biz_entry/libshared_api.h"
+#include <ark_runtime/jsvm.h>
+#include <arkui/native_interface.h>
+#include <arkui/native_node.h>
+#include <arkui/native_node_napi.h>
+#include <dlfcn.h>
+#include <hilog/log.h>
+#include <memory>
+#include <multimedia/image_framework/image/image_source_native.h>
+#include <multimedia/image_framework/image/pixelmap_native.h>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <thread>
 
 static std::string customFontPath;
 static std::string customImagePath;
+
+class MyTask {
+public:
+    MyTask(napi_env env, std::function<void()> func) : env_(env), func_(std::move(func)) {}
+    void operator()() { func_(); }
+    napi_env env_;
+
+private:
+    std::function<void()> func_;
+};
+
+static void CallSetTimeout(MyTask *task) {
+    auto env = task->env_;
+
+    napi_threadsafe_function func;
+    napi_value work_name;
+    napi_create_string_utf8(env, "Node-API Thread-safe Call", NAPI_AUTO_LENGTH, &work_name);
+    napi_create_threadsafe_function(
+        env, nullptr, nullptr, work_name, 0, 1, nullptr, nullptr, nullptr,
+        [](napi_env env, napi_value js_cb, void *context, void *data) {
+            auto task = static_cast<MyTask *>(data);
+            (*task)();
+            delete task;
+        },
+        &func);
+
+    std::thread([env, func, task]() {
+        // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        napi_call_threadsafe_function(func, task, napi_tsfn_blocking);
+    }).detach();
+}
+
+static void RunTask(ArkUI_NodeEvent *event) {
+    auto inputEvent = OH_ArkUI_NodeEvent_GetInputEvent(event);
+    auto type = OH_ArkUI_UIInputEvent_GetAction(inputEvent);
+    if (type == UI_TOUCH_EVENT_ACTION_DOWN) {
+        auto userData = OH_ArkUI_NodeEvent_GetUserData(event);
+        auto task = static_cast<MyTask *>(userData);
+        CallSetTimeout(task);
+    }
+}
+
+static void AddStack(napi_env env, ArkUI_NativeNodeAPI_1 *api, ArkUI_NodeContentHandle root);
+
+static void AddImage(napi_env env, ArkUI_NativeNodeAPI_1 *api, ArkUI_NodeContentHandle root) {
+    static ArkUI_NodeHandle node;
+    static std::once_flag flag;
+    std::call_once(flag, [api]() { node = api->createNode(ARKUI_NODE_IMAGE); });
+    ArkUI_NumberValue sizeValue[] = {{.f32 = 100}};
+    ArkUI_AttributeItem sizeItem = {sizeValue, 1};
+    api->setAttribute(node, NODE_WIDTH, &sizeItem);
+    api->setAttribute(node, NODE_HEIGHT, &sizeItem);
+    ArkUI_AttributeItem srcItem = {.string = "https://vfiles.gtimg.cn/wuji_dashboard/xy/starter/59ef6918.gif"};
+    api->setAttribute(node, NODE_IMAGE_SRC, &srcItem);
+    api->addNodeEventReceiver(node, RunTask);
+    auto task = new MyTask(env, [env, api, root]() {
+        OH_LOG_Print(LOG_APP, LOG_INFO, 0xD003F00, "ImeDemo", "Image clicked");
+        OH_ArkUI_NodeContent_RemoveNode(root, node);
+        api->resetAttribute(node, NODE_IMAGE_SRC);
+        api->resetAttribute(node, NODE_WIDTH);
+        api->resetAttribute(node, NODE_HEIGHT);
+
+        AddStack(env, api, root);
+    });
+    api->registerNodeEvent(node, NODE_TOUCH_EVENT, NODE_TOUCH_EVENT, task);
+    OH_ArkUI_NodeContent_AddNode(root, node);
+}
+
+static void AddStack(napi_env env, ArkUI_NativeNodeAPI_1 *api, ArkUI_NodeContentHandle root) {
+    auto node = api->createNode(ARKUI_NODE_STACK);
+    ArkUI_NumberValue sizeValue[] = {{.f32 = 100}};
+    ArkUI_AttributeItem sizeItem = {sizeValue, 1};
+    api->setAttribute(node, NODE_WIDTH, &sizeItem);
+    api->setAttribute(node, NODE_HEIGHT, &sizeItem);
+    ArkUI_NumberValue value[] = {{.u32 = 0xffff0000}};
+    ArkUI_AttributeItem bgColorItem = {value, 1};
+    api->setAttribute(node, NODE_BACKGROUND_COLOR, &bgColorItem);
+    api->addNodeEventReceiver(node, RunTask);
+    auto task = new MyTask(env, [env, api, root, node]() {
+        OH_LOG_Print(LOG_APP, LOG_INFO, 0xD003F00, "ImeDemo", "Stack clicked");
+        OH_ArkUI_NodeContent_RemoveNode(root, node);
+        api->disposeNode(node);
+        AddImage(env, api, root);
+    });
+    api->registerNodeEvent(node, NODE_TOUCH_EVENT, NODE_TOUCH_EVENT, task);
+    OH_ArkUI_NodeContent_AddNode(root, node);
+}
+
+static napi_value ImeDemo(napi_env env, napi_callback_info info) {
+    size_t argc = 1;
+    napi_value args[1] = {nullptr};
+    napi_get_cb_info(env, info, &argc, args, nullptr, nullptr);
+
+    ArkUI_NodeContentHandle contentHandle;
+    OH_ArkUI_GetNodeContentFromNapiValue(env, args[0], &contentHandle);
+    static ArkUI_NativeNodeAPI_1 *api = nullptr;
+    static std::once_flag flag;
+    std::call_once(flag, []() { OH_ArkUI_GetModuleInterface(ARKUI_NATIVE_NODE, ArkUI_NativeNodeAPI_1, api); });
+    AddImage(env, api, contentHandle);
+
+    return nullptr;
+}
 
 static napi_value SetFontPath(napi_env env, napi_callback_info info) {
     if (customFontPath.size() > 0) {
@@ -181,6 +288,7 @@ static napi_value Init(napi_env env, napi_value exports) {
     napi_property_descriptor desc[] = {
         {"initKuikly", nullptr, InitKuikly, nullptr, nullptr, nullptr, napi_default, nullptr},
         {"setFontPath", nullptr, SetFontPath, nullptr, nullptr, nullptr, napi_default, nullptr},
+        {"imeDemo", nullptr, ImeDemo, nullptr, nullptr, nullptr, napi_default, nullptr},
     };
     napi_define_properties(env, exports, sizeof(desc) / sizeof(desc[0]), desc);
     return exports;

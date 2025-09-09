@@ -1,6 +1,8 @@
 {
   "src": [
     "pages/Index",
-    "pages/GestureThrough"
+    "pages/GestureThrough",
+    "inputmethodextability/pages/Index",
+    "inputmethodextability/pages/FloatPage"
   ]
 }

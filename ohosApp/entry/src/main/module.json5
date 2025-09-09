@@ -36,6 +36,16 @@
           }
         ]
       }
+    ],
+    "extensionAbilities": [
+      {
+        "description": "inputMethod",
+        "name": "InputMethodExtAbility",
+        "icon": "$media:app_icon",
+        "srcEntry": "./ets/inputmethodextability/InputMethodService.ets",
+        "type": "inputMethod",
+        "exported": false
+      }
     ]
   }
 }
