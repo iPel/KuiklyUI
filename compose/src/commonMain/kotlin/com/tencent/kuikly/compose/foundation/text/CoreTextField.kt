@@ -445,15 +445,16 @@ private fun updateKeyboardOptions(options: KeyboardOptions, attr: TextAreaAttr) 
 
     // 处理输入法动作
     when (options.imeAction) {
+        ImeAction.Go -> attr.returnKeyTypeGo()
         ImeAction.Search -> attr.returnKeyTypeSearch()
         ImeAction.Send -> attr.returnKeyTypeSend()
+        ImeAction.Previous -> attr.returnKeyTypePrevious()
         ImeAction.Next -> attr.returnKeyTypeNext()
         ImeAction.Done -> attr.returnKeyTypeDone()
         // 其他情况使用默认行为
         ImeAction.Unspecified,
         ImeAction.Default,
-        ImeAction.None,
-        ImeAction.Previous -> {}
+        ImeAction.None -> {}
     }
 }
 
@@ -463,8 +464,10 @@ fun updateKeyboardActions(
 ) {
     event.inputReturn {
         val imeAction = when (it.imeAction) {
-            "send" -> ImeAction.Send
+            "go" -> ImeAction.Go
             "search" -> ImeAction.Search
+            "send" -> ImeAction.Send
+            "previous" -> ImeAction.Previous
             "next" -> ImeAction.Next
             "done" -> ImeAction.Done
             else -> null

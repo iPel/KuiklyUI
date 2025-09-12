@@ -314,6 +314,9 @@ open class KRTextFieldView(context: Context, private val softInputMode: Int?) : 
             "go" -> {
                 EditorInfo.IME_ACTION_GO
             }
+            "previous" -> {
+                EditorInfo.IME_ACTION_PREVIOUS
+            }
             else -> {
                 EditorInfo.IME_NULL
             }

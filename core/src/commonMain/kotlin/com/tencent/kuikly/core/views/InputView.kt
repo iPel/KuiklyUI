@@ -201,6 +201,10 @@ class InputAttr : Attr() {
         RETURN_KEY_TYPE with "google"
     }
 
+    fun returnKeyTypePrevious() {
+        RETURN_KEY_TYPE with "previous"
+    }
+
     fun textAlignCenter(): InputAttr {
         TextConst.TEXT_ALIGN with "center"
         return this

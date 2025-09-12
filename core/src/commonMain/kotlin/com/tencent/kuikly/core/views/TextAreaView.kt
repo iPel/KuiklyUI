@@ -371,6 +371,10 @@ open class TextAreaAttr : Attr() {
         RETURN_KEY_TYPE with "google"
     }
 
+    fun returnKeyTypePrevious() {
+        RETURN_KEY_TYPE with "previous"
+    }
+
     fun autofocus(focus: Boolean) {
         autofocus = focus
     }
