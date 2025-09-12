@@ -260,8 +260,10 @@ class InputAttr : Attr() {
 }
 
 data class InputParams(
-    val text: String
-    )
+    val text: String,
+    val imeAction: String? = null
+)
+
 data class KeyboardParams(
     val height: Float,
     val duration: Float
@@ -313,7 +315,10 @@ class InputEvent : Event() {
         register(INPUT_RETURN){
             it as JSONObject
             val text = it.optString("text")
-            handler(InputParams(text))
+            val imeAction = it.optString("ime_action").ifEmpty {
+                getView()?.getViewAttr()?.getProp(InputAttr.RETURN_KEY_TYPE) as? String ?: ""
+            }
+            handler(InputParams(text, imeAction))
         }
     }
 
@@ -334,6 +339,7 @@ class InputEvent : Event() {
      * 当用户按下return键时调用的方法（与 inputReturn 方法相同）
      * @param handler 处理用户按下返回键事件的回调函数
      */
+    @Deprecated("Use inputReturn instead", ReplaceWith("inputReturn(handler)"))
     fun onTextReturn(handler: InputEventHandlerFn) {
         register(INPUT_RETURN){
             it as JSONObject

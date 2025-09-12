@@ -100,11 +100,6 @@ open class KRTextFieldView(context: Context, private val softInputMode: Int?) : 
      */
     private var inputReturnCallBack: KuiklyRenderCallback? = null
 
-    /**
-     * 键盘IME动作回调
-     */
-    private var imeActionCallBack: KuiklyRenderCallback? = null
-
     private var fontSize = -1f
     private var lineHeight = -1f
     private var lineHeightSpan: HRLineHeightSpan? = null
@@ -176,7 +171,7 @@ open class KRTextFieldView(context: Context, private val softInputMode: Int?) : 
             EDITABLE -> setEditable(propValue)
             TEXT_DID_CHANGE -> observeTextChanged(propValue)
             INPUT_RETURN -> observeInputReturn(propValue)
-            IME_ACTION -> observeIMEAction(propValue)
+            IME_ACTION -> observeInputReturn(propValue)
             INPUT_FOCUS -> {
                 inputFocusCallback = propValue as KuiklyRenderCallback
                 observeFocusChanged()
@@ -532,15 +527,6 @@ open class KRTextFieldView(context: Context, private val softInputMode: Int?) : 
 
     private fun observeInputReturn(propValue: Any): Boolean {
         inputReturnCallBack = propValue as KuiklyRenderCallback
-        setOnEditorActionListener { _, _, _ ->
-            inputReturnCallBack?.invoke(createCallbackParamMap())
-            true
-        }
-        return true
-    }
-
-    private fun observeIMEAction(propValue: Any): Boolean {
-        imeActionCallBack = propValue as KuiklyRenderCallback
         setOnEditorActionListener { _, actionId, _ ->
             val imeAction = when (actionId) {
                 EditorInfo.IME_ACTION_GO -> "go"
@@ -551,9 +537,9 @@ open class KRTextFieldView(context: Context, private val softInputMode: Int?) : 
                 EditorInfo.IME_ACTION_PREVIOUS -> "previous"
                 else -> ""
             }
-
-            imeActionCallBack?.invoke(mapOf(
-                "ime_action" to imeAction
+            inputReturnCallBack?.invoke(mapOf(
+                "ime_action" to imeAction,
+                "text" to text.toString()
             ))
             true
         }

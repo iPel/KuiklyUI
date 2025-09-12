@@ -14,8 +14,6 @@
  * limitations under the License.
  */
 
-@file:Suppress("DEPRECATION")
-
 package com.tencent.kuikly.compose.foundation.text
 
 import androidx.compose.runtime.Composable
@@ -463,8 +461,8 @@ fun updateKeyboardActions(
     event: TextAreaEvent,
     state: LegacyTextFieldState
 ) {
-    event.onIMEAction {
-        val imeAction = when(it) {
+    event.inputReturn {
+        val imeAction = when (it.imeAction) {
             "send" -> ImeAction.Send
             "search" -> ImeAction.Search
             "next" -> ImeAction.Next
