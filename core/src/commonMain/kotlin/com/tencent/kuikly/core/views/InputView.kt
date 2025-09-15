@@ -173,6 +173,10 @@ class InputAttr : Attr() {
         KEYBOARD_TYPE with "email"
     }
 
+    fun returnKeyTypeNone() {
+        RETURN_KEY_TYPE with "none"
+    }
+
     fun returnKeyTypeSearch() {
         RETURN_KEY_TYPE with "search"
     }

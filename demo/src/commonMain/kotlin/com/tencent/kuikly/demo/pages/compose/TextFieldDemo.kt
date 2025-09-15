@@ -310,6 +310,11 @@ class TextFieldDemo : ComposeContainer() {
                             Text(if (singleLine) "切换为多行输入" else "切换为单行输入")
                         }
                         var actionsEvent by remember { mutableStateOf("") }
+                        val modifier = Modifier.onFocusChanged {
+                            if (it.isFocused) {
+                                actionsEvent = ""
+                            }
+                        }
                         val keyboardActions = remember {
                             KeyboardActions(
                                 onDone = {
@@ -333,18 +338,61 @@ class TextFieldDemo : ComposeContainer() {
                             )
                         }
                         Text("KeyboardActions 事件：$actionsEvent")
+                        var textNotSet by remember { mutableStateOf("") }
                         TextField(
-                            label = { Text("ImeAction.Default") },
-                            value = "",
-                            onValueChange = {},
+                            label = { Text("ImeAction Not Set") },
+                            value = textNotSet,
+                            onValueChange = { textNotSet = it },
+                            modifier = modifier,
                             singleLine = singleLine,
                             keyboardActions = keyboardActions,
                         )
                         Spacer(modifier = Modifier.height(5.dp))
+                        var textDefault by remember { mutableStateOf("") }
+                        TextField(
+                            label = { Text("ImeAction.Default") },
+                            value = textDefault,
+                            onValueChange = { textDefault = it },
+                            modifier = modifier,
+                            singleLine = singleLine,
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Default
+                            ),
+                            keyboardActions = keyboardActions,
+                        )
+                        Spacer(modifier = Modifier.height(5.dp))
+                        var textUnspecified by remember { mutableStateOf("") }
+                        TextField(
+                            label = { Text("ImeAction.Unspecified") },
+                            value = textUnspecified,
+                            onValueChange = { textUnspecified = it },
+                            modifier = modifier,
+                            singleLine = singleLine,
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.Unspecified
+                            ),
+                            keyboardActions = keyboardActions,
+                        )
+                        Spacer(modifier = Modifier.height(5.dp))
+                        var textNone by remember { mutableStateOf("") }
+                        TextField(
+                            label = { Text("ImeAction.None") },
+                            value = textNone,
+                            onValueChange = { textNone = it },
+                            modifier = modifier,
+                            singleLine = singleLine,
+                            keyboardOptions = KeyboardOptions(
+                                imeAction = ImeAction.None
+                            ),
+                            keyboardActions = keyboardActions,
+                        )
+                        Spacer(modifier = Modifier.height(5.dp))
+                        var textGo by remember { mutableStateOf("") }
                         TextField(
                             label = { Text("ImeAction.Go") },
-                            value = "",
-                            onValueChange = {},
+                            value = textGo,
+                            onValueChange = { textGo = it },
+                            modifier = modifier,
                             singleLine = singleLine,
                             keyboardOptions = KeyboardOptions(
                                 imeAction = ImeAction.Go
@@ -352,10 +400,12 @@ class TextFieldDemo : ComposeContainer() {
                             keyboardActions = keyboardActions,
                         )
                         Spacer(modifier = Modifier.height(5.dp))
+                        var textSearch by remember { mutableStateOf("") }
                         TextField(
                             label = { Text("ImeAction.Search") },
-                            value = "",
-                            onValueChange = {},
+                            value = textSearch,
+                            onValueChange = { textSearch = it },
+                            modifier = modifier,
                             singleLine = singleLine,
                             keyboardOptions = KeyboardOptions(
                                 imeAction = ImeAction.Search
@@ -363,10 +413,12 @@ class TextFieldDemo : ComposeContainer() {
                             keyboardActions = keyboardActions,
                         )
                         Spacer(modifier = Modifier.height(5.dp))
+                        var textSend by remember { mutableStateOf("") }
                         TextField(
                             label = { Text("ImeAction.Send") },
-                            value = "",
-                            onValueChange = {},
+                            value = textSend,
+                            onValueChange = { textSend = it },
+                            modifier = modifier,
                             singleLine = singleLine,
                             keyboardOptions = KeyboardOptions(
                                 imeAction = ImeAction.Send
@@ -374,10 +426,12 @@ class TextFieldDemo : ComposeContainer() {
                             keyboardActions = keyboardActions,
                         )
                         Spacer(modifier = Modifier.height(5.dp))
+                        var textPrevious by remember { mutableStateOf("") }
                         TextField(
                             label = { Text("ImeAction.Previous") },
-                            value = "",
-                            onValueChange = {},
+                            value = textPrevious,
+                            onValueChange = { textPrevious = it },
+                            modifier = modifier,
                             singleLine = singleLine,
                             keyboardOptions = KeyboardOptions(
                                 imeAction = ImeAction.Previous
@@ -385,10 +439,12 @@ class TextFieldDemo : ComposeContainer() {
                             keyboardActions = keyboardActions,
                         )
                         Spacer(modifier = Modifier.height(5.dp))
+                        var textNext by remember { mutableStateOf("") }
                         TextField(
                             label = { Text("ImeAction.Next") },
-                            value = "",
-                            onValueChange = {},
+                            value = textNext,
+                            onValueChange = { textNext = it },
+                            modifier = modifier,
                             singleLine = singleLine,
                             keyboardOptions = KeyboardOptions(
                                 imeAction = ImeAction.Next
@@ -396,10 +452,12 @@ class TextFieldDemo : ComposeContainer() {
                             keyboardActions = keyboardActions,
                         )
                         Spacer(modifier = Modifier.height(5.dp))
+                        var textDone by remember { mutableStateOf("") }
                         TextField(
                             label = { Text("ImeAction.Done") },
-                            value = "",
-                            onValueChange = {},
+                            value = textDone,
+                            onValueChange = { textDone = it },
+                            modifier = modifier,
                             singleLine = singleLine,
                             keyboardOptions = KeyboardOptions(
                                 imeAction = ImeAction.Done

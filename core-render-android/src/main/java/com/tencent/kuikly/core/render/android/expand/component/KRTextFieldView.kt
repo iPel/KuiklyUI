@@ -299,6 +299,9 @@ open class KRTextFieldView(context: Context, private val softInputMode: Int?) : 
 
     private fun setReturnKeyType(value: Any): Boolean {
         val returnKeyType = when (value as String) {
+            "none" -> {
+                EditorInfo.IME_ACTION_NONE
+            }
             "search" -> {
                 EditorInfo.IME_ACTION_SEARCH
             }
