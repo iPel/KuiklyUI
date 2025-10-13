@@ -861,20 +861,18 @@ class LazyLoopDirectivesView<T>(
                 scrollToPositionWithoutAnimate(isRow, index, finalOffset, offset)
             }
         } else { // scroll down
-            if (animate) {
-                listView?.setNextScrollToParams(ScrollToParams(index, offset, animate))
-            }
-            // 减hairWidth(1像素)，防止size超过Float精度后，setContentOffset不满足执行条件
-            val maxScrollOffset = max(0f, listViewContent!!.frame.size - listView!!.frame.size - hairWidth)
             val ratio = (index - currentEnd) / (curList.size - currentEnd).toFloat()
-            val estimateOffset = min(itemEnd.frame.start + itemEnd.frame.size * ratio + offset, maxScrollOffset)
+            val estimateOffset = itemEnd.frame.start + itemEnd.frame.size * ratio + offset
 
             if (animate) {
                 listView?.setNextScrollToParams(ScrollToParams(index, offset, animate))
                 val (finalIndex, finalOffset) = calculateAnimateScrollStartOffset(isRow, index, estimateOffset, false)
                 scrollToPositionWithoutAnimate(isRow, finalIndex, finalOffset, 0f)
             } else {
-                scrollToPositionWithoutAnimate(isRow, index, max(estimateOffset, currentListOffset()), offset)
+                // 减hairWidth(1像素)，防止size超过Float精度后，setContentOffset不满足执行条件
+                val maxScrollOffset = max(0f, listViewContent!!.frame.size - listView!!.frame.size - hairWidth)
+                val finalOffset = max(currentListOffset(), min(estimateOffset, maxScrollOffset))
+                scrollToPositionWithoutAnimate(isRow, index, finalOffset, offset)
             }
         }
     }
@@ -896,7 +894,9 @@ class LazyLoopDirectivesView<T>(
             val finalIndex = index + floor((finalOffset - estimateOffset) / avgItemSize).toInt()
             return Pair(finalIndex, finalOffset)
         } else {
-            val finalOffset = max(estimateOffset - distance, currentListOffset())
+            // 减hairWidth(1像素)，防止size超过Float精度后，setContentOffset不满足执行条件
+            val maxScrollOffset = max(0f, listViewContent!!.frame.size - listView!!.frame.size - hairWidth)
+            val finalOffset = max(currentListOffset(), min(estimateOffset, maxScrollOffset) - distance)
             val finalIndex = index - floor((estimateOffset - finalOffset) / avgItemSize).toInt()
             return Pair(finalIndex, finalOffset)
         }
