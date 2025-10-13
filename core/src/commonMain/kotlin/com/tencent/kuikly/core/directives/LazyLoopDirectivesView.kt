@@ -31,6 +31,7 @@ import com.tencent.kuikly.core.pager.IPagerLayoutEventObserver
 import com.tencent.kuikly.core.reactive.ReactiveObserver
 import com.tencent.kuikly.core.reactive.collection.CollectionOperation
 import com.tencent.kuikly.core.reactive.collection.ObservableList
+import com.tencent.kuikly.core.timer.setTimeout
 import com.tencent.kuikly.core.views.DivView
 import com.tencent.kuikly.core.views.IScrollerViewEventObserver
 import com.tencent.kuikly.core.views.ListContentView
@@ -228,6 +229,8 @@ class LazyLoopDirectivesView<T>(
         1f / getPager().pageData.density
     }
 
+    private val isOhos by lazy(LazyThreadSafetyMode.NONE) { getPager().pageData.isOhOs }
+
     override fun didMoveToParentView() {
         super.didMoveToParentView()
         listViewContent = parent as? ListContentView ?: throw RuntimeException("vforLazy必须是List子节点")
@@ -310,6 +313,9 @@ class LazyLoopDirectivesView<T>(
         }
     }
 
+    // 鸿蒙系统连续滚动时，会多次触发scrollEnd事件，因此需要校验列表是否真的停止滚动
+    private fun needConfirmScrollEnd() = isOhos
+
     override fun scrollerScrollDidEnd(params: ScrollParams) {
         val offset = if (isRowDirection()) params.offsetX else params.offsetY
         if (listView!!.verifyScrollEventFilterRule(offset, FilterType.SCROLL_END)) {
@@ -317,7 +323,18 @@ class LazyLoopDirectivesView<T>(
             return
         }
         logInfo { "handleScrollEnd offset=$offset" }
-        if (needWaitLayout()) {
+        if (needConfirmScrollEnd()) {
+            setTimeout(16) {
+                listViewContent?.also {
+                    if (it.offsetX == params.offsetX && it.offsetY == params.offsetY) {
+                        logInfo { "scrollEnd confirmed" }
+                        correctScrollOffsetInScrollEnd(offset)
+                    } else {
+                        logInfo { "scrollEnd skipped due to offset changed" }
+                    }
+                }
+            }
+        } else if (needWaitLayout()) {
             registerAfterLayoutTaskFor(scrollEnd = true)
         } else {
             correctScrollOffsetInScrollEnd(offset)
@@ -730,6 +747,7 @@ class LazyLoopDirectivesView<T>(
                 val toOffset = max(0f, offset + diff)
                 logInfo { "correctScrollOffset offset=$offset diff=$diff scroll" }
                 listView?.apply {
+                    setScrollEventFilterRule(toOffset, toOffset, false)
                     if (isRow) {
                         // 提前更新ListContentView.offsetX, 避免ListView重复修改item的RenderView闪烁
                         this@LazyLoopDirectivesView.listViewContent?.offsetX = toOffset
