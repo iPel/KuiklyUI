@@ -594,8 +594,6 @@ open class ScrollerContentView : ViewContainer<ContainerAttr, GroupEvent>(), IPa
     }
 
     open fun contentOffsetDidChanged(offsetX: Float, offsetY: Float, params: ScrollParams) {
-        this.offsetX = offsetX
-        this.offsetY = offsetY
     }
 
     override fun onPagerWillCalculateLayoutFinish() {
