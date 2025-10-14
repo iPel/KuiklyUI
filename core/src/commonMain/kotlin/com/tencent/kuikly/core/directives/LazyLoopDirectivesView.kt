@@ -62,6 +62,7 @@ class LazyLoopDirectivesView<T>(
         private const val DEFAULT_ITEM_SIZE = 100f
         private const val KEY_NEXT_SCROLL_TO_PARAMS = "lazy_loop_next_scroll_to_params"
         private const val KEY_SCROLL_EVENT_FILTER_RULE = "lazy_loop_scroll_event_filter_rule"
+        private const val KEY_VIEW_SIZE_EXTRA = "lazy_loop_view_size_extra"
         private const val FILTER_TIMEOUT = 2000L
         private const val DEBUG_LOG = false
         private const val TAG = "LazyLoop"
@@ -97,7 +98,7 @@ class LazyLoopDirectivesView<T>(
             disableScroll: Boolean = false,
             filterType: FilterType = FilterType.SCROLL
         ) {
-            logInfo { "setScrollEventFilterRule from=$from to=$to animate=$animate disable=$disableScroll" }
+            logInfo { "setScrollEventFilterRule from=$from to=$to animate=$animate disable=$disableScroll type=$filterType" }
             val disabled = if (disableScroll && getViewAttr().getProp(ScrollerAttr.SCROLL_ENABLED) != false) {
                 getViewAttr().scrollEnable(false)
                 true
@@ -153,6 +154,11 @@ class LazyLoopDirectivesView<T>(
             return true
         }
 
+        internal fun ListView<*, *>.hasValidScrollEventFilterRule(): Boolean {
+            val info = extProps[KEY_SCROLL_EVENT_FILTER_RULE] as? FilterRuleInfo ?: return false
+            return info.timestamp > DateTime.currentTimestamp()
+        }
+
         internal inline fun needScroll(currentOffset: Float, finalOffset: Float): Boolean {
             return abs(currentOffset - finalOffset) >= 1f
         }
@@ -162,6 +168,13 @@ class LazyLoopDirectivesView<T>(
                 KLog.i(TAG, msg())
             }
         }
+
+        // store for negative size value
+        private var DivView.sizeExtra: Float
+            get() = (extProps[KEY_VIEW_SIZE_EXTRA] as? Float) ?: 0f
+            set(value) {
+                extProps[KEY_VIEW_SIZE_EXTRA] = value
+            }
     }
 
     private class ScrollToParams(
@@ -738,10 +751,11 @@ class LazyLoopDirectivesView<T>(
     private fun correctScrollOffsetInScrollEnd(offset: Float) {
         val isRow = isRowDirection()
         val correctSize = if (startSize >= 0f) startSize else avgItemSize * currentStart
-        val currentSize = itemStart.frame.size
+        val currentSize = itemStart.sizeExtra.takeIf { it < 0f } ?: itemStart.frame.size
         val diff = correctSize - currentSize
         logInfo { "correctScrollOffset $currentSize->$correctSize size" }
         if (diff != 0f) {
+            itemStart.sizeExtra = 0f
             setItemStartSize(correctSize)
             if (offset >= itemStart.frame.start) {
                 val toOffset = max(0f, offset + diff)
@@ -764,40 +778,23 @@ class LazyLoopDirectivesView<T>(
         }
     }
 
-    private fun correctScrollOffsetInLayout(index: Int, offset: Float, size: Float): Boolean {
-        // 由于onPagerCalculateLayoutFinish回调不保证顺序，这里无法确定ListView的排版流程是否结束，
-        // 因此只能读取frame的width/height，但需要更新frame的x/y。
-        val isRow = isRowDirection()
-        val currentSize = itemStart.frame.size
-        val correctSize = if (size != INVALID_DIMENSION) {
-            var range = 0f
-            for (i in 0 until currentEnd - currentStart) {
-                val child = children[BEFORE_COUNT + i]
-                val node = child.flexNode
-                if (!node.layoutFrame.isDefaultValue() && !child.absoluteFlexNode) {
-                    range += node.range
-                }
+    private fun calcRange(start: Int, end: Int): Float {
+        var range = 0f
+        for (i in 0 until end - start) {
+            val child = children[BEFORE_COUNT + i]
+            val node = child.flexNode
+            if (!node.layoutFrame.isDefaultValue() && !child.absoluteFlexNode) {
+                range += node.range
             }
-            max(0f, size - range - itemEnd.frame.size)
-        } else if (index in currentStart until currentEnd) {
-            var range = 0f
-            for (i in 0 until index - currentStart) {
-                val child = children[BEFORE_COUNT + i]
-                val node = child.flexNode
-                if (!node.layoutFrame.isDefaultValue() && !child.absoluteFlexNode) {
-                    range += node.range
-                }
-            }
-            offset - range
-        } else {
-            logInfo { "correctScrollOffset failed $index $offset" }
-            return false
         }
+        return range
+    }
 
-        if (correctSize < 0f) {
-            // correctSize小于0说明顶端空间已经不足，必须停下滑动并执行correctScrollOffsetInScrollEnd
-            logInfo { "correctScrollOffset invalid size=$correctSize $index $offset ${currentListOffset()}" }
-            listView?.setScrollEventFilterRule(
+    private fun handleStartSpaceNotEnoughInLayout(spaceExtra: Float, offset: Float) {
+        require(spaceExtra < 0f)
+        val listView = listView ?: return
+        if (!listView.hasValidScrollEventFilterRule() && needScroll(currentListOffset(), offset)) {
+            listView.setScrollEventFilterRule(
                 offset,
                 offset,
                 animate = false,
@@ -806,10 +803,38 @@ class LazyLoopDirectivesView<T>(
             )
             // 来一个缓动，避免突然停下的突兀
             if (isRowDirection()) {
-                listView?.setContentOffset(offset, 0f, true)
+                listView.setContentOffset(offset, 0f, true)
             } else {
-                listView?.setContentOffset(0f, offset, true)
+                listView.setContentOffset(0f, offset, true)
             }
+        } else {
+            itemStart.sizeExtra = spaceExtra
+            // this method called by `onPagerCalculateLayoutFinish`,
+            // so we don't need to check `needWaitLayout`
+            registerAfterLayoutTaskFor(scrollEnd = true)
+        }
+    }
+
+    private fun correctScrollOffsetInLayout(index: Int, offset: Float, size: Float): Boolean {
+        // 由于onPagerCalculateLayoutFinish回调不保证顺序，这里无法确定ListView的排版流程是否结束，
+        // 因此只能读取frame的width/height，但需要更新frame的x/y。
+        val isRow = isRowDirection()
+        val currentSize = itemStart.frame.size
+        val correctSize = if (size != INVALID_DIMENSION) {
+            val range = calcRange(currentStart, currentEnd)
+            max(0f, size - range - itemEnd.frame.size)
+        } else if (index in currentStart until currentEnd) {
+            val range = calcRange(currentStart, index)
+            val tmp = offset - range
+            if (tmp < -hairWidth) {
+                // 小于-1px说明顶端空间已经不足，必须停下滑动并执行correctScrollOffsetInScrollEnd
+                logInfo { "correctScrollOffset invalid size=$tmp $index $offset ${currentListOffset()}" }
+                handleStartSpaceNotEnoughInLayout(tmp, offset)
+                return false
+            }
+            tmp.coerceAtLeast(0f)
+        } else {
+            logInfo { "correctScrollOffset failed $index $offset" }
             return false
         }
 
