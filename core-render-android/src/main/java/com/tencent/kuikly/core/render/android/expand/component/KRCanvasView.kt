@@ -112,8 +112,16 @@ class KRCanvasView(context: Context) : View(context), IKuiklyRenderViewExport {
     }
 
     override fun onDraw(canvas: Canvas) {
+        val checkpoint: Int = if (hasCustomClipPath()) {
+            canvas.save()
+        } else {
+            -1
+        }
         drawCommonDecoration(width, height, canvas) // 绘制通用样式
         performDrawOperationList(canvas) // 绘制canvas指令
+        if (checkpoint != -1) {
+            canvas.restoreToCount(checkpoint)
+        }
         drawCommonForegroundDecoration(width, height, canvas)
     }
 
