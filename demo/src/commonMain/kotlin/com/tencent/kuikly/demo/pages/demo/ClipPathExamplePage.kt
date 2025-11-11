@@ -39,6 +39,7 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 
 @Page("clip")
 internal class ClipPathExamplePage : BasePager() {
@@ -72,11 +73,30 @@ internal class ClipPathExamplePage : BasePager() {
                 closePath()
             }
         }
+
+        private fun drawMoonShape(context: PathApi, width: Float, height: Float, alignStart: Boolean) {
+            require(width > 0 && height > 0)
+            val size = min(width, height)
+            val centerX = if (alignStart) size / 2f else width - size / 2f
+            val centerY = if (alignStart) size / 2f else height - size / 2f
+            val radius = size / 2f
+            val innerCenterX = centerX + radius / 2f
+            val innerCenterY = centerY - radius / 2f
+            val innerRadius = radius / sqrt(2f)
+
+            with (context) {
+                beginPath()
+                arc(centerX, centerY, radius, 0f, (1.5 * PI).toFloat(), false)
+                arc(innerCenterX, innerCenterY, innerRadius, (1.25 * PI).toFloat(), (0.25 * PI).toFloat(), true)
+                closePath()
+            }
+        }
     }
 
     private var enableClip by observable(true)
     private var expand by observable(false)
     private var alignStart by observable(true)
+    private var shapeFlag by observable(false)
     private var conflictSwitch by observable(false)
 
     override fun body(): ViewBuilder {
@@ -156,7 +176,11 @@ internal class ClipPathExamplePage : BasePager() {
                         backgroundColor(Color.RED)
                         if (ctx.enableClip) {
                             clipPath { w, h ->
-                                drawStarShape(this, w, h, ctx.alignStart)
+                                if (ctx.shapeFlag) {
+                                    drawMoonShape(this, w, h, ctx.alignStart)
+                                } else {
+                                    drawStarShape(this, w, h, ctx.alignStart)
+                                }
                             }
                         } else {
                             clipPath(null)
@@ -218,6 +242,24 @@ internal class ClipPathExamplePage : BasePager() {
                         event {
                             click {
                                 ctx.alignStart = !ctx.alignStart
+                            }
+                        }
+                    }
+                    Button {
+                        attr {
+                            titleAttr {
+                                text("切换形状")
+                            }
+                            backgroundColor(Color(0xFF007AFF))
+                            highlightBackgroundColor(Color(0x66000000))
+                            borderRadius(16f)
+                            width(64f)
+                            height(32f)
+                            marginLeft(5f)
+                        }
+                        event {
+                            click {
+                                ctx.shapeFlag = !ctx.shapeFlag
                             }
                         }
                     }
