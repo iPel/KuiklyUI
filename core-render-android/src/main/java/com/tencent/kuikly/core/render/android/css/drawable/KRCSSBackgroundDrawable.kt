@@ -26,7 +26,6 @@ import com.tencent.kuikly.core.render.android.const.KRCssConst
 import com.tencent.kuikly.core.render.android.css.ktx.toColor
 import com.tencent.kuikly.core.render.android.css.ktx.toPxF
 import com.tencent.kuikly.core.render.android.css.ktx.toPxI
-import androidx.core.graphics.withClip
 
 /**
  * 实现的样式包含:
@@ -222,9 +221,10 @@ class KRCSSBackgroundDrawable : GradientDrawable() {
         if (clipPath == null) {
             super.draw(canvas)
         } else {
-            canvas.withClip(clipPath!!) {
-                super.draw(canvas)
-            }
+            val checkpoint = canvas.save()
+            canvas.clipPath(clipPath!!)
+            super.draw(canvas)
+            canvas.restoreToCount(checkpoint)
             if (lineWidth > 0 && lineColor != Color.TRANSPARENT) {
                 canvas.drawPath(clipPath!!, linePaint)
             }

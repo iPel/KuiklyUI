@@ -586,7 +586,7 @@ class KRViewDecoration(targetView: View) : IKRViewDecoration {
                     else -> {
                         KuiklyRenderLog.e("ClipPath", "Unknown path command: $command")
                         path.rewind()
-                        break
+                        return
                     }
                 }
             }
