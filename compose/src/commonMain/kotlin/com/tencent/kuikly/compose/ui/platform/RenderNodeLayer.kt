@@ -141,9 +141,13 @@ internal class RenderNodeLayer(
 
         val x = position.x
         val y = position.y
-        val outline = outline ?: return true
-
-        return isInOutline(outline, x, y)
+        roundRect?.also {
+            return isInRoundedRect(it, x, y)
+        }
+        outline?.also {
+            return isInOutline(it, x, y)
+        }
+        return x >= 0f && x < size.width && y >= 0f && y < size.height
     }
 
     private var mutatedFields: Int = 0
