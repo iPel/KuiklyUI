@@ -18,6 +18,7 @@
 
 package com.tencent.kuikly.lifecycle.viewmodel.internal
 
+import com.tencent.kuikly.compose.coroutines.internal.ComposeDispatcher
 import com.tencent.kuikly.lifecycle.ViewModel
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
@@ -41,27 +42,26 @@ internal const val VIEW_MODEL_SCOPE_KEY =
  *
  * The [CoroutineScope.coroutineContext] is configured with:
  * - [SupervisorJob]: ensures children jobs can fail independently of each other.
- * - [MainCoroutineDispatcher.immediate]: executes jobs immediately on the main (UI) thread. If
- *  the [Dispatchers.Main] is not available on the current platform (e.g., Linux), we fallback to
- *  an [EmptyCoroutineContext].
+ * - `KuiklyPageCoroutineScope`: executes jobs immediately on the Kuikly context thread.
  *
  * For background execution, use [kotlinx.coroutines.withContext] to switch to appropriate
  * dispatchers (e.g., [kotlinx.coroutines.IO]).
  */
-internal fun createViewModelScope(): CloseableCoroutineScope {
-    val dispatcher = try {
-        // In platforms where `Dispatchers.Main` is not available, Kotlin Multiplatform will throw
-        // an exception (the specific exception type may depend on the platform). Since there's no
-        // direct functional alternative, we use `EmptyCoroutineContext` to ensure that a coroutine
-        // launched within this scope will run in the same context as the caller.
-        Dispatchers.Main.immediate
-    } catch (_: NotImplementedError) {
-        // In Native environments where `Dispatchers.Main` might not exist (e.g., Linux):
-        EmptyCoroutineContext
-    } catch (_: IllegalStateException) {
-        // In JVM Desktop environments where `Dispatchers.Main` might not exist (e.g., Swing):
-        EmptyCoroutineContext
-    }
+internal fun createViewModelScope(pagerId: String): CloseableCoroutineScope {
+//    val dispatcher = try {
+//        // In platforms where `Dispatchers.Main` is not available, Kotlin Multiplatform will throw
+//        // an exception (the specific exception type may depend on the platform). Since there's no
+//        // direct functional alternative, we use `EmptyCoroutineContext` to ensure that a coroutine
+//        // launched within this scope will run in the same context as the caller.
+//        Dispatchers.Main.immediate
+//    } catch (_: NotImplementedError) {
+//        // In Native environments where `Dispatchers.Main` might not exist (e.g., Linux):
+//        EmptyCoroutineContext
+//    } catch (_: IllegalStateException) {
+//        // In JVM Desktop environments where `Dispatchers.Main` might not exist (e.g., Swing):
+//        EmptyCoroutineContext
+//    }
+    val dispatcher = ComposeDispatcher(pagerId, true)
     return CloseableCoroutineScope(coroutineContext = dispatcher + SupervisorJob())
 }
 

@@ -18,7 +18,6 @@
 
 package com.tencent.kuikly.lifecycle.viewmodel.internal
 
-import androidx.annotation.MainThread
 import com.tencent.kuikly.compose.ui.SynchronizedObject
 import com.tencent.kuikly.compose.ui.synchronized
 import kotlin.concurrent.Volatile
@@ -60,6 +59,8 @@ internal class ViewModelImpl {
     @Volatile
     private var isCleared = false
 
+    internal lateinit var pagerId: String
+
     constructor()
 
     constructor(viewModelScope: CoroutineScope) {
@@ -76,7 +77,7 @@ internal class ViewModelImpl {
     }
 
     /** @see [ViewModel.clear] */
-    @MainThread
+    /*@MainThread Migrated to Kuikly context thread*/
     fun clear() {
         if (isCleared) return
 

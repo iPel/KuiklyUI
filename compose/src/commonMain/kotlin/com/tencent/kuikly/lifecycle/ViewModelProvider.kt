@@ -46,7 +46,7 @@ public class ViewModelProvider private constructor(
      * @return A ViewModel that is an instance of the given type `T`.
      * @throws IllegalArgumentException if the given [modelClass] is local or anonymous class.
      */
-    @MainThread
+    /*@MainThread Migrated to Kuikly context thread*/
     public operator fun <T : ViewModel> get(modelClass: KClass<T>): T =
         impl.getViewModel(modelClass)
 
@@ -63,7 +63,7 @@ public class ViewModelProvider private constructor(
      * present.
      * @return A ViewModel that is an instance of the given type `T`.
      */
-    @MainThread
+    /*@MainThread Migrated to Kuikly context thread*/
     public operator fun <T : ViewModel> get(key: String, modelClass: KClass<T>): T =
         impl.getViewModel(modelClass, key)
 

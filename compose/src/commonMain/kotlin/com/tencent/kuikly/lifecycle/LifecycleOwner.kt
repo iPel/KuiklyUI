@@ -15,6 +15,7 @@
  */
 package com.tencent.kuikly.lifecycle
 
+import com.tencent.kuikly.core.base.PagerScope
 import kotlinx.coroutines.CoroutineScope
 
 /**
@@ -24,7 +25,7 @@ import kotlinx.coroutines.CoroutineScope
  * @see Lifecycle
  * @see ViewTreeLifecycleOwner
  */
-public interface LifecycleOwner {
+public interface LifecycleOwner : PagerScope {
     /**
      * Returns the Lifecycle of the provider.
      *
@@ -38,8 +39,7 @@ public interface LifecycleOwner {
  *
  * This scope will be cancelled when the [Lifecycle] is destroyed.
  *
- * This scope is bound to
- * [Dispatchers.Main.immediate][kotlinx.coroutines.MainCoroutineDispatcher.immediate].
+ * This scope is bound to `KuiklyPageCoroutineScope`.
  */
 public val LifecycleOwner.lifecycleScope: LifecycleCoroutineScope
     get() = lifecycle.coroutineScope

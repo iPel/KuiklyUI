@@ -109,6 +109,12 @@ public abstract class ViewModel {
      */
     private val impl: ViewModelImpl?
 
+    internal var pagerId: String
+        get() = impl?.pagerId ?: ""
+        set(value) {
+            impl?.pagerId = value
+        }
+
     /**
      * Creates a new [ViewModel].
      *
@@ -179,7 +185,7 @@ public abstract class ViewModel {
      * 3. [Close][AutoCloseable.close] resources added **without** a key via [addCloseable].
      * 4. Invoke the [onCleared] callback.
      */
-    @MainThread
+    /*@MainThread Migrated to Kuikly context thread*/
     internal fun clear() {
         impl?.clear()
         onCleared()
@@ -231,9 +237,7 @@ public abstract class ViewModel {
  *
  * The [CoroutineScope.coroutineContext] is configured with:
  * - [SupervisorJob]: ensures children jobs can fail independently of each other.
- * - [MainCoroutineDispatcher.immediate]: executes jobs immediately on the main (UI) thread. If
- *  the [Dispatchers.Main] is not available on the current platform (e.g., Linux), we fallback
- *  to an [EmptyCoroutineContext].
+ * - `KuiklyPageCoroutineScope`: executes jobs immediately on the Kuikly context thread.
  *
  * This scope is automatically cancelled when the [ViewModel] is cleared, and can be replaced by
  * using the [ViewModel] constructor overload that takes in a `viewModelScope: CoroutineScope`.
@@ -246,7 +250,7 @@ public abstract class ViewModel {
 public val ViewModel.viewModelScope: CoroutineScope
     get() = synchronized(VIEW_MODEL_SCOPE_LOCK) {
         getCloseable(VIEW_MODEL_SCOPE_KEY)
-            ?: createViewModelScope().also { scope -> addCloseable(VIEW_MODEL_SCOPE_KEY, scope) }
+            ?: createViewModelScope(pagerId).also { scope -> addCloseable(VIEW_MODEL_SCOPE_KEY, scope) }
     }
 
 private val VIEW_MODEL_SCOPE_LOCK = SynchronizedObject()

@@ -16,6 +16,9 @@
 package com.tencent.kuikly.lifecycle.viewmodel.compose
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.InternalComposeApi
+import androidx.compose.runtime.currentComposer
+import com.tencent.kuikly.compose.ui.platform.LocalActivity
 import com.tencent.kuikly.lifecycle.ViewModel
 import com.tencent.kuikly.lifecycle.ViewModelProvider
 import com.tencent.kuikly.lifecycle.ViewModelStoreOwner
@@ -53,7 +56,7 @@ public inline fun <reified VM : ViewModel> viewModel(
         "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
     },
     key: String? = null,
-    factory: ViewModelProvider.Factory? = null,
+    factory: ViewModelProvider.Factory/*? = null*/,
     extras: CreationExtras = CreationExtras.Empty
 ): VM = viewModel(VM::class, viewModelStoreOwner, key, factory, extras)
 
@@ -79,6 +82,7 @@ public inline fun <reified VM : ViewModel> viewModel(
  *
  * @sample androidx.lifecycle.viewmodel.compose.samples.CreationExtrasViewModel
  */
+@OptIn(InternalComposeApi::class)
 @Suppress("MissingJvmstatic")
 @Composable
 public fun <VM : ViewModel> viewModel(
@@ -87,9 +91,9 @@ public fun <VM : ViewModel> viewModel(
         "No ViewModelStoreOwner was provided via LocalViewModelStoreOwner"
     },
     key: String? = null,
-    factory: ViewModelProvider.Factory? = null,
+    factory: ViewModelProvider.Factory/*? = null*/,
     extras: CreationExtras = CreationExtras.Empty
-): VM = viewModelStoreOwner.get(modelClass, key, factory, extras)
+): VM = viewModelStoreOwner.get(modelClass, key, factory, extras, LocalActivity.current.pagerId)
 
 /**
  * Returns an existing [ViewModel] or creates a new one in the scope (usually, a fragment or
@@ -126,18 +130,17 @@ public inline fun <reified VM : ViewModel> viewModel(
 
 internal fun <VM : ViewModel> ViewModelStoreOwner.get(
     modelClass: KClass<VM>,
-    key: String? = null,
-    factory: ViewModelProvider.Factory? = null,
-    extras: CreationExtras = CreationExtras.Empty
+    key: String?,
+    factory: ViewModelProvider.Factory,
+    extras: CreationExtras,
+    pagerId: String
 ): VM {
-    val provider = if (factory != null) {
-        ViewModelProvider.create(this.viewModelStore, factory, extras)
-    } else {
-        ViewModelProvider.create(this, ViewModelProviders.unsupportedCreateViewModel(), CreationExtras.Empty)
-    }
-    return if (key != null) {
+    val provider = ViewModelProvider.create(this.viewModelStore, factory, extras)
+    val vm = if (key != null) {
         provider[key, modelClass]
     } else {
         provider[modelClass]
     }
+    vm.pagerId = pagerId
+    return vm
 }

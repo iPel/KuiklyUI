@@ -16,8 +16,12 @@ package com.tencent.kuikly.demo.pages.compose
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.tencent.kuikly.lifecycle.Lifecycle
 import com.tencent.kuikly.lifecycle.LifecycleEventObserver
 import com.tencent.kuikly.lifecycle.ViewModel
@@ -35,6 +39,7 @@ import com.tencent.kuikly.compose.foundation.layout.fillMaxWidth
 import com.tencent.kuikly.compose.foundation.layout.height
 import com.tencent.kuikly.compose.foundation.layout.padding
 import com.tencent.kuikly.compose.foundation.layout.size
+import com.tencent.kuikly.compose.foundation.lazy.LazyColumn
 import com.tencent.kuikly.compose.foundation.shape.CircleShape
 import com.tencent.kuikly.compose.foundation.shape.RoundedCornerShape
 import com.tencent.kuikly.compose.material3.Button
@@ -51,9 +56,12 @@ import com.tencent.kuikly.compose.ui.Modifier
 import com.tencent.kuikly.compose.ui.graphics.Color
 import com.tencent.kuikly.compose.ui.text.font.FontFamily
 import com.tencent.kuikly.compose.ui.text.font.FontWeight
+import com.tencent.kuikly.compose.ui.text.style.TextAlign
 import com.tencent.kuikly.compose.ui.unit.dp
 import com.tencent.kuikly.compose.ui.unit.sp
 import com.tencent.kuikly.core.annotations.Page
+import com.tencent.kuikly.lifecycle.eventFlow
+import com.tencent.kuikly.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -108,6 +116,17 @@ internal class ViewModelDemo : ComposeContainer() {
 
                 // 6. ViewModel 与 Lifecycle 结合示例
                 LifecycleAwareDemo()
+
+                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+
+                // 7. lifecycleScope 示例
+                LifecycleScopeDemo()
+
+                HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+
+                // 8. Lifecycle.eventFlow 示例
+                LifecycleEventFlowDemo()
+
             }
         }
     }
@@ -313,8 +332,10 @@ private class TimerViewModel : ViewModel() {
             // 记录开始时间（减去已累计的时间）
             startTimeMillis = TimeProvider.currentTimeMillis() - elapsedTimeMillis
 
+            println("pel ase start...")
             viewModelScope.launch {
                 while (_isRunning.value) {
+                    println("pel ase running...")
                     // 基于实际时间计算当前秒数（避免累积误差）
                     val currentElapsed = TimeProvider.currentTimeMillis() - startTimeMillis
                     val currentSeconds = (currentElapsed / 1000).toInt()
@@ -413,7 +434,9 @@ private class DataLoadingViewModel : ViewModel() {
     val uiState: StateFlow<UiState<String>> = _uiState.asStateFlow()
     
     fun loadData(shouldFail: Boolean = false) {
+        println("pel ase loadData...")
         viewModelScope.launch {
+            println("pel ase loadData in...")
             _uiState.value = UiState.Loading
             
             // 模拟网络请求
@@ -548,9 +571,11 @@ private class FormViewModel : ViewModel() {
         val state = _formState.value
         val usernameError = validateUsername(state.username)
         val passwordError = validatePassword(state.password)
-        
+
+        println("pel ase submit...")
         if (usernameError == null && passwordError == null) {
             viewModelScope.launch {
+                println("pel ase submit in...")
                 _submitStatus.value = "提交中..."
                 delay(1500)
                 _submitStatus.value = "✅ 提交成功！"
@@ -690,9 +715,10 @@ private class LifecycleAwareViewModel : ViewModel() {
     // 后台任务 - 仅在 RESUMED 时运行，使用基于时间戳的计算避免误差累积
     private fun startBackgroundTask() {
         activeStartTimeMillis = TimeProvider.currentTimeMillis()
-
+        println("pel ase startBackgroundTask...")
         viewModelScope.launch {
             while (_isActive.value) {
+                println("pel ase background task running...")
                 // 基于实际时间计算秒数（避免累积误差）
                 val currentElapsed = totalElapsedTimeMillis +
                                    (TimeProvider.currentTimeMillis() - activeStartTimeMillis)
@@ -912,6 +938,459 @@ private fun LifecycleAwareDemo() {
                     .fillMaxWidth()
                     .background(
                         Color(0xFFFFF9C4).copy(alpha = 0.3f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(8.dp)
+            )
+        }
+    }
+}
+
+// ============================================================
+// 7. lifecycleScope 示例 - 展示生命周期绑定的协程作用域
+// ============================================================
+
+@Composable
+private fun LifecycleScopeDemo() {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val scope = lifecycleOwner.lifecycleScope
+
+    var taskLog by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isTaskRunning by remember { mutableStateOf(false) }
+    var counter by remember { mutableStateOf(0) }
+
+    // 监听生命周期状态
+    var lifecycleState by remember { mutableStateOf("UNKNOWN") }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            lifecycleState = when (event) {
+                Lifecycle.Event.ON_CREATE -> "CREATED"
+                Lifecycle.Event.ON_START -> "STARTED"
+                Lifecycle.Event.ON_RESUME -> "RESUMED"
+                Lifecycle.Event.ON_PAUSE -> "PAUSED"
+                Lifecycle.Event.ON_STOP -> "STOPPED"
+                Lifecycle.Event.ON_DESTROY -> "DESTROYED"
+                else -> "UNKNOWN"
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    DemoCard(title = "7. lifecycleScope 示例") {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 当前生命周期状态
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp)
+                ) {
+                    Text(
+                        text = "当前生命周期: $lifecycleState",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "协程状态: ${if (isTaskRunning) "运行中" else "空闲"}",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
+            }
+
+            // 计数器显示
+            Text(
+                text = "计数器: $counter",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+
+            // 操作按钮
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            taskLog = taskLog + "✓ 启动了简单任务"
+                            delay(1000)
+                            counter++
+                            taskLog = taskLog + "✓ 简单任务完成"
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("简单任务", fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = {
+                        if (!isTaskRunning) {
+                            isTaskRunning = true
+                            scope.launch {
+                                taskLog = taskLog + "⏰ 启动长时任务..."
+                                try {
+                                    repeat(10) { i ->
+                                        delay(1000)
+                                        counter++
+                                        taskLog = taskLog + "⏰ 长时任务进度: ${i + 1}/10"
+                                    }
+                                    taskLog = taskLog + "✅ 长时任务完成"
+                                } catch (e: Exception) {
+                                    taskLog = taskLog + "❌ 任务被取消: ${e.message}"
+                                } finally {
+                                    isTaskRunning = false
+                                }
+                            }
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = !isTaskRunning
+                ) {
+                    Text("长时任务", fontSize = 12.sp)
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        scope.launch {
+                            taskLog = taskLog + "🌐 模拟网络请求..."
+                            delay(2000)
+                            taskLog = taskLog + "✓ 网络请求成功"
+                            counter += 5
+                        }
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("网络请求", fontSize = 12.sp)
+                }
+
+                Button(
+                    onClick = {
+                        counter = 0
+                        taskLog = emptyList()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("清空日志", fontSize = 12.sp)
+                }
+            }
+
+            HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+
+            // 任务日志
+            Text(
+                text = "任务日志 (${taskLog.size})",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold
+            )
+
+            if (taskLog.isEmpty()) {
+                Text(
+                    text = "点击上方按钮执行任务...",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Color.Black.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(8.dp)
+                        .height(150.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    taskLog.takeLast(20).forEach { log ->
+                        item {
+                            Text(
+                                text = log,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 说明文字
+            Text(
+                text = """
+                💡 关键特性:
+                • lifecycleScope 绑定到 LifecycleOwner（Activity/Fragment）
+                • 当生命周期被销毁(DESTROYED)时，所有协程会自动取消
+                • 适合 UI 相关的短期任务（网络请求、动画等）
+                • 与 viewModelScope 的区别：
+                  - viewModelScope: 绑定 ViewModel，配置变化时保留
+                  - lifecycleScope: 绑定生命周期，配置变化时取消
+                
+                🧪 测试方法:
+                • 点击"长时任务"，然后旋转屏幕或切换应用
+                • 任务会被自动取消，不会继续执行
+                """.trimIndent(),
+                fontSize = 11.sp,
+                color = Color.Gray,
+                lineHeight = 16.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Color(0xFFE3F2FD).copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .padding(8.dp)
+            )
+        }
+    }
+}
+
+// ============================================================
+// 8. Lifecycle.eventFlow 示例
+// ============================================================
+
+@Composable
+private fun LifecycleEventFlowDemo() {
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var eventLog by remember { mutableStateOf<List<String>>(emptyList()) }
+    var currentState by remember { mutableStateOf("INITIALIZED") }
+    var eventCount by remember { mutableStateOf(0) }
+
+    // 使用 lifecycle.eventFlow 直接收集生命周期事件，LaunchedEffect 会在组合撤销时自动取消
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.eventFlow.collect { event ->
+            eventCount++
+            val timestamp = formatTimestamp(TimeProvider.currentTimeMillis())
+            val eventName = when (event) {
+                Lifecycle.Event.ON_CREATE -> "🎬 ON_CREATE"
+                Lifecycle.Event.ON_START -> "👁️ ON_START"
+                Lifecycle.Event.ON_RESUME -> "▶️ ON_RESUME"
+                Lifecycle.Event.ON_PAUSE -> "⏸️ ON_PAUSE"
+                Lifecycle.Event.ON_STOP -> "⏹️ ON_STOP"
+                Lifecycle.Event.ON_DESTROY -> "💥 ON_DESTROY"
+                Lifecycle.Event.ON_ANY -> "🔄 ON_ANY"
+            }
+
+            currentState = when (event) {
+                Lifecycle.Event.ON_CREATE -> "CREATED"
+                Lifecycle.Event.ON_START -> "STARTED"
+                Lifecycle.Event.ON_RESUME -> "RESUMED"
+                Lifecycle.Event.ON_PAUSE -> "PAUSED"
+                Lifecycle.Event.ON_STOP -> "STOPPED"
+                Lifecycle.Event.ON_DESTROY -> "DESTROYED"
+                else -> currentState
+            }
+
+            eventLog = eventLog + "[$timestamp] $eventName → $currentState"
+        }
+    }
+
+    DemoCard(title = "8. Lifecycle.eventFlow 示例") {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // 状态卡片
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(
+                        containerColor = when (currentState) {
+                            "RESUMED" -> Color(0xFF4CAF50).copy(alpha = 0.2f)
+                            "STARTED" -> Color(0xFF2196F3).copy(alpha = 0.2f)
+                            "CREATED" -> Color(0xFFFF9800).copy(alpha = 0.2f)
+                            "PAUSED" -> Color(0xFFFFC107).copy(alpha = 0.2f)
+                            "STOPPED" -> Color.Gray.copy(alpha = 0.2f)
+                            else -> Color.LightGray.copy(alpha = 0.2f)
+                        }
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "当前状态",
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                        Text(
+                            text = currentState,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Card(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "事件计数",
+                            fontSize = 11.sp,
+                            color = Color.Gray
+                        )
+                        Text(
+                            text = "$eventCount",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(Modifier, DividerDefaults.Thickness, DividerDefaults.color)
+
+            // 事件日志
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "生命周期事件流 (${eventLog.size})",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Button(
+                    onClick = {
+                        eventLog = emptyList()
+                        eventCount = 0
+                    },
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("清空", fontSize = 12.sp)
+                }
+            }
+
+            if (eventLog.isEmpty()) {
+                Text(
+                    text = "等待生命周期事件...",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Color.Black.copy(alpha = 0.05f),
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        .padding(8.dp)
+                        .height(200.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    eventLog.forEach { log ->
+                        item {
+                            Text(
+                                text = log,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 生命周期状态流转图
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFFF9C4).copy(alpha = 0.3f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "生命周期状态流转:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "INITIALIZED → CREATED → STARTED → RESUMED",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFF4CAF50)
+                    )
+                    Text(
+                        text = "RESUMED → PAUSED → STOPPED → DESTROYED",
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        color = Color(0xFFF44336)
+                    )
+                }
+            }
+
+            // 说明文字
+            Text(
+                text = """
+                💡 Lifecycle.eventFlow 特性:
+                
+                API 说明:
+                • lifecycle.eventFlow 是一个 Flow\<Lifecycle.Event\>
+                • 基于协程的生命周期观察方式
+                • 比 LifecycleObserver 更 Kotlin 风格
+                
+                优势:
+                ✅ 可使用 Flow 操作符
+                ✅ 与协程结构化并发集成
+                ✅ 简洁、声明式
+                
+                典型用法:
+                ```kotlin
+                LaunchedEffect(lifecycleOwner) {
+                    lifecycleOwner.lifecycle.eventFlow.collect { event ->
+                        // 处理事件
+                    }
+                }
+                ```
+                
+                测试:
+                1. 打开页面观察 CREATE/START/RESUME
+                2. 切到后台观察 PAUSE/STOP
+                3. 返回前台观察 START/RESUME
+                """.trimIndent(),
+                fontSize = 11.sp,
+                color = Color.Gray,
+                lineHeight = 16.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Color(0xFFE3F2FD).copy(alpha = 0.5f),
                         shape = RoundedCornerShape(8.dp)
                     )
                     .padding(8.dp)

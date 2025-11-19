@@ -17,7 +17,9 @@ package com.tencent.kuikly.lifecycle
 
 import androidx.annotation.MainThread
 import androidx.annotation.RestrictTo
+import com.tencent.kuikly.compose.coroutines.internal.ComposeDispatcher
 import com.tencent.kuikly.compose.foundation.AtomicReference
+import com.tencent.kuikly.core.base.PagerScope
 import kotlin.coroutines.CoroutineContext
 import kotlin.jvm.JvmStatic
 import kotlinx.coroutines.CoroutineScope
@@ -51,7 +53,7 @@ import kotlinx.coroutines.launch
  * To observe lifecycle events call [.addObserver] passing an object
  * that implements either [DefaultLifecycleObserver] or [LifecycleEventObserver].
  */
-public abstract class Lifecycle {
+public abstract class Lifecycle : PagerScope {
     /**
      * Lifecycle coroutines extensions stashes the CoroutineScope into this field.
      *
@@ -72,7 +74,7 @@ public abstract class Lifecycle {
      *
      * @param observer The observer to notify.
      */
-    @MainThread
+    /*@MainThread Migrated to Kuikly context thread*/
     public abstract fun addObserver(observer: LifecycleObserver)
 
     /**
@@ -88,7 +90,7 @@ public abstract class Lifecycle {
      *
      * @param observer The observer to be removed.
      */
-    @MainThread
+    /*@MainThread Migrated to Kuikly context thread*/
     public abstract fun removeObserver(observer: LifecycleObserver)
 
     /**
@@ -315,8 +317,7 @@ public abstract class Lifecycle {
  *
  * This scope will be cancelled when the [Lifecycle] is destroyed.
  *
- * This scope is bound to
- * [Dispatchers.Main.immediate][kotlinx.coroutines.MainCoroutineDispatcher.immediate]
+ * This scope is bound to `KuiklyPageCoroutineScope`
  */
 public val Lifecycle.coroutineScope: LifecycleCoroutineScope
     get() {
@@ -325,12 +326,13 @@ public val Lifecycle.coroutineScope: LifecycleCoroutineScope
             if (existing != null) {
                 return existing
             }
+            val pageCoroutineScope = ComposeDispatcher(pagerId)
             val newScope = LifecycleCoroutineScopeImpl(
                 this,
-                SupervisorJob() + Dispatchers.Main.immediate
+                SupervisorJob() + pageCoroutineScope
             )
             if (internalScopeRef.compareAndSet(null, newScope)) {
-                newScope.register()
+                newScope.register(pageCoroutineScope)
                 return newScope
             }
         }
@@ -338,7 +340,7 @@ public val Lifecycle.coroutineScope: LifecycleCoroutineScope
 
 /**
  * [CoroutineScope] tied to a [Lifecycle] and
- * [Dispatchers.Main.immediate][kotlinx.coroutines.MainCoroutineDispatcher.immediate]
+ * `KuiklyPageCoroutineScope`
  *
  * This scope will be cancelled when the [Lifecycle] is destroyed.
  */
@@ -359,8 +361,8 @@ internal class LifecycleCoroutineScopeImpl(
         }
     }
 
-    fun register() {
-        launch(Dispatchers.Main.immediate) {
+    fun register(context: CoroutineContext) {
+        launch(context) {
             if (lifecycle.currentState >= Lifecycle.State.INITIALIZED) {
                 lifecycle.addObserver(this@LifecycleCoroutineScopeImpl)
             } else {
@@ -387,4 +389,4 @@ public val Lifecycle.eventFlow: Flow<Lifecycle.Event>
         }.also { addObserver(it) }
 
         awaitClose { removeObserver(observer) }
-    }.flowOn(Dispatchers.Main.immediate)
+    }.flowOn(ComposeDispatcher(pagerId))
