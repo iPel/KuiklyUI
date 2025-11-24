@@ -60,6 +60,7 @@ import com.tencent.kuikly.compose.ui.text.style.TextAlign
 import com.tencent.kuikly.compose.ui.unit.dp
 import com.tencent.kuikly.compose.ui.unit.sp
 import com.tencent.kuikly.core.annotations.Page
+import com.tencent.kuikly.core.log.KLog
 import com.tencent.kuikly.lifecycle.eventFlow
 import com.tencent.kuikly.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
@@ -132,6 +133,8 @@ internal class ViewModelDemo : ComposeContainer() {
     }
 }
 
+private const val TAG = "ViewModelDemo"
+
 // ============================================================
 // 1. 基本计数器示例 - 展示 ViewModel 的基本使用
 // ============================================================
@@ -157,7 +160,7 @@ private class CounterViewModel : ViewModel() {
     // 清理资源
     override fun onCleared() {
         super.onCleared()
-        println("CounterViewModel 被清理")
+        KLog.i(TAG, "CounterViewModel 被清理")
     }
 }
 
@@ -332,10 +335,8 @@ private class TimerViewModel : ViewModel() {
             // 记录开始时间（减去已累计的时间）
             startTimeMillis = TimeProvider.currentTimeMillis() - elapsedTimeMillis
 
-            println("pel ase start...")
             viewModelScope.launch {
                 while (_isRunning.value) {
-                    println("pel ase running...")
                     // 基于实际时间计算当前秒数（避免累积误差）
                     val currentElapsed = TimeProvider.currentTimeMillis() - startTimeMillis
                     val currentSeconds = (currentElapsed / 1000).toInt()
@@ -374,7 +375,7 @@ private class TimerViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         _isRunning.value = false
-        println("TimerViewModel 被清理，定时器已停止")
+        KLog.i(TAG, "TimerViewModel 被清理，定时器已停止")
     }
 }
 
@@ -434,9 +435,7 @@ private class DataLoadingViewModel : ViewModel() {
     val uiState: StateFlow<UiState<String>> = _uiState.asStateFlow()
     
     fun loadData(shouldFail: Boolean = false) {
-        println("pel ase loadData...")
         viewModelScope.launch {
-            println("pel ase loadData in...")
             _uiState.value = UiState.Loading
             
             // 模拟网络请求
@@ -572,10 +571,8 @@ private class FormViewModel : ViewModel() {
         val usernameError = validateUsername(state.username)
         val passwordError = validatePassword(state.password)
 
-        println("pel ase submit...")
         if (usernameError == null && passwordError == null) {
             viewModelScope.launch {
-                println("pel ase submit in...")
                 _submitStatus.value = "提交中..."
                 delay(1500)
                 _submitStatus.value = "✅ 提交成功！"
@@ -715,10 +712,8 @@ private class LifecycleAwareViewModel : ViewModel() {
     // 后台任务 - 仅在 RESUMED 时运行，使用基于时间戳的计算避免误差累积
     private fun startBackgroundTask() {
         activeStartTimeMillis = TimeProvider.currentTimeMillis()
-        println("pel ase startBackgroundTask...")
         viewModelScope.launch {
             while (_isActive.value) {
-                println("pel ase background task running...")
                 // 基于实际时间计算秒数（避免累积误差）
                 val currentElapsed = totalElapsedTimeMillis +
                                    (TimeProvider.currentTimeMillis() - activeStartTimeMillis)
@@ -749,7 +744,7 @@ private class LifecycleAwareViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         _isActive.value = false
-        println("LifecycleAwareViewModel 被清理")
+        KLog.i(TAG, "LifecycleAwareViewModel 被清理")
     }
 }
 
