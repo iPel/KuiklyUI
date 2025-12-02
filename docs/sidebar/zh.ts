@@ -178,6 +178,22 @@ export const zhSidebar = sidebar({
         "quickStart.md",
         "allApi.md"
     ],
+    "/Compose": [
+        {
+            text: "Kuikly Compose",
+            prefix: "/Compose",
+            collapsible: false,
+            children: [
+                "overview.md",
+                "getting-started.md",
+                "concepts.md",
+                "layout-components.md",
+                "interop-core.md",
+                "multiplatform.md",
+                "official-compose-links.md"
+            ]
+        }
+    ],
     "/Blog": [
         "roadmap2025.md",
         {
