@@ -1,116 +1,85 @@
-## 快速开始 Kuikly Compose
+# 快速开始
 
-本页目标：**5 分钟内在工程中跑起第一个 Kuikly Compose 页面**，并搞清楚「与官方 Jetpack Compose 有哪些关键不同」。
+本页目标：**5 分钟内在工程中跑起第一个 Kuikly Compose 页面**。
 
-> 前置假设：你已经按照 Kuikly 的整体 QuickStart（`/QuickStart`）完成了基础环境搭建。
+## 前置条件
 
-### 1. 添加依赖
+在开始之前，请确保您已完成 [环境搭建](../QuickStart/env-setup.html) 中介绍的所有环境配置。
 
-Kuikly Compose 作为 Kuikly 的一个模块提供，一般不需要你单独管理 Compose 版本：
+## 创建Compose工程
+Kuikly 提供了预配置的模板工程，这是开始使用 Kuikly Compose 最简单的方式：
 
-- Kuikly 内部已经固定并对齐一套 Compose 版本（当前基于 Compose 1.7）
-- 业务工程只需要按照 Kuikly 官方 QuickStart 指南引入依赖即可
+1. 创建工程，并选择Kuikly project template （需要完成环境搭建中的ide插件安装）
+![](./img/create1.png)
+2. 填好基本信息后，下一步，注意DSL选择Compose，最后点击Finish完成工程创建
+![](./img/create2.png)
+3. 执行gradle sync 同步项目（File > Sync Project with Gradle Files）
+4. 运行项目，查看示例页面
 
-详细依赖和版本信息，请参考：
-
-- Kuikly 仓库根目录的 `compose` 模块 `build.gradle.kts`
-- 官网文档中的依赖说明（TODO：链接到正式依赖文档）
-
-### 2. 包名规则与导包方式
-
-**Runtime 保持官方包名**：
-
-- 继续使用官方 `androidx.compose.runtime.*`
-- 包括 `@Composable`、`remember`、`mutableStateOf` 等 API，完全复用官方行为
-
-**UI / Foundation / Material 等改为 Kuikly 包名**：
-
-- 不再使用 `androidx.compose.foundation.*` / `androidx.compose.material3.*` / `androidx.compose.ui.*`
-- 而是改为：
-  - `com.tencent.kuikly.compose.foundation.*`
-  - `com.tencent.kuikly.compose.material3.*`
-  - `com.tencent.kuikly.compose.ui.*`
-
-示例：
-
-```kotlin
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-
-import com.tencent.kuikly.compose.material3.Button
-import com.tencent.kuikly.compose.material3.Text
-import com.tencent.kuikly.compose.ui.Modifier
-import com.tencent.kuikly.compose.foundation.layout.Column
-import com.tencent.kuikly.compose.foundation.layout.padding
-```
-
-> 记忆方式：**只有 runtime 还是 `androidx.compose.runtime`，其它 UI 相关包全部切到 `com.tencent.kuikly.compose`。**
-
-### 3. 第一个 Kuikly Compose 页面
+## 第一个 Compose 页面
 
 Kuikly 中的页面一般继承自 `ComposeContainer`（一个基于 Kuikly Core 的跨端页面容器），并在其中通过 `setContent` 设置 `@Composable` 内容。
 
 ```kotlin
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.tencent.kuikly.compose.material3.Button
 import com.tencent.kuikly.compose.material3.Text
 import com.tencent.kuikly.compose.foundation.layout.Column
 import com.tencent.kuikly.compose.foundation.layout.padding
 import com.tencent.kuikly.compose.ui.Modifier
 
-// 伪代码，仅展示结构
+@Page("helloWorld")
 class HelloComposePage : ComposeContainer() {
 
-    override fun onCreate() {
-        super.onCreate()
-
-        setContent {
-            HelloComposeScreen()
-        }
-    }
+   override fun willInit() {
+      super.willInit()
+      setContent {
+          HelloComposeScreen()
+      }
+   }
 }
 
 @Composable
 private fun HelloComposeScreen() {
-    val count = remember { mutableStateOf(0) }
+    var count by remember { mutableStateOf(0) }
 
     Column(modifier = Modifier.padding(16.dp)) {
-        Text(text = "Hello Kuikly Compose, count = ${count.value}")
-        Button(onClick = { count.value++ }) {
+        Text(text = "Hello Kuikly Compose, count = $count")
+        Button(onClick = { count++ }) {
             Text(text = "Click me")
         }
     }
 }
 ```
 
-注意几点：
+**关键步骤说明**：
+
+1. **创建页面类**
+   - 继承 `ComposeContainer`
+   - 使用 `@Page` 注解定义页面名称
+   - 在 `willInit()` 中调用 `setContent {}` 设置 UI
+
+2. **实现 Compose UI**
+   - 在 `setContent` 中使用 Compose DSL 编写 UI 代码
+   - 可以使用标准的 Compose 组件和修饰符
+
+3. **运行和测试**
+   - 使用 Android Studio 运行项目
+   - 在模拟器或真机上查看效果
+
+**注意**：
 
 - `HelloComposePage` 继承自 Kuikly 的 `ComposeContainer`，而不是 Android Activity
-- `setContent {}` 的用法与 Jetpack Compose 基本一致，但底层渲染通过 `KuiklyApplier` 连接到 Kuikly Core
+- `setContent {}` 的用法与 Jetpack Compose 基本一致
 - 页面生命周期、路由跳转等能力来自 Kuikly Core，与自研 DSL 页面保持一致
 
-### 4. 多端运行示意
+## 文档阅读推荐
 
-当你在 Kuikly 的 KMP 工程中编写上面的 `@Composable` 页面时：
-
-- `commonMain` 中的 Compose 代码会被 Android / iOS / Harmony / Web / 小程序 共用
-- 各端通过自己对应的 Render 模块负责真实视图的构建与事件分发
-
-Illustration（简化流程）：
-
-1. 业务代码调用 `setContent { HelloComposeScreen() }`
-2. 官方 Compose Runtime 负责重组与状态管理
-3. `KuiklyApplier` 将 Compose 树的增量变更映射为 Kuikly KNode 树操作
-4. Kuikly Core 依据 KNode 驱动各端原生视图渲染
-
-你仍然用 **Compose 的写法** 描述 UI，但渲染栈变成了 Kuikly 的跨端底座。
-
-### 5. 官方 Compose 教程推荐阅读顺序
-
-对于还不太熟悉 Jetpack Compose 的同学，建议先按官方路线补一遍基础：
+如果你对 Jetpack Compose 还不熟悉，建议先按官方路线补一遍基础：
 
 1. 基础：Composable、State、Recomposition
 2. 布局：Column/Row/Box 与 Modifier
@@ -122,9 +91,4 @@ Illustration（简化流程）：
 
 - [Jetpack Compose 官方文档导航](./official-compose-links.md)
 
-### 6. 下一步
-
-- 想理解 Kuikly 在架构上的改造，请看：[核心概念与架构](./concepts.md)
-- 想知道哪些组件/布局完全对齐官方，哪些有差异，请看：[布局与组件](./layout-components.md)
-
-
+### 下一步

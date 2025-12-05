@@ -180,16 +180,47 @@ export const zhSidebar = sidebar({
     ],
     "/Compose": [
         {
-            text: "Kuikly Compose",
+            text: "入门",
             prefix: "/Compose",
             collapsible: false,
             children: [
                 "overview.md",
                 "getting-started.md",
-                "concepts.md",
-                "layout-components.md",
-                "interop-core.md",
-                "multiplatform.md",
+                "how-to-read.md",
+                "status.md"
+            ]
+        },
+        {
+            text: "开发指南",
+            prefix: "/Compose",
+            collapsible: false,
+            children: [
+                "layout.md",
+                "components.md",
+                "layout-components.md"
+            ]
+        },
+        {
+            text: "集成与扩展",
+            prefix: "/Compose",
+            collapsible: false,
+            children: [
+                "interop-core.md"
+            ]
+        },
+        {
+            text: "多端与迁移",
+            prefix: "/Compose",
+            collapsible: false,
+            children: [
+                "multiplatform.md"
+            ]
+        },
+        {
+            text: "参考",
+            prefix: "/Compose",
+            collapsible: false,
+            children: [
                 "official-compose-links.md"
             ]
         }

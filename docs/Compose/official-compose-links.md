@@ -1,4 +1,4 @@
-## Jetpack Compose 官方文档导航（推荐阅读顺序）
+# Jetpack Compose 官方文档导航（推荐阅读顺序）
 
 Kuikly Compose 在概念与语义上高度对齐 Jetpack Compose，因此基础用法推荐直接阅读官方文档。本页给出一条面向 **Kuikly 使用者** 的阅读路线建议。
 

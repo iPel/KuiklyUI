@@ -1,4 +1,4 @@
-## 与 Core 模块协同（Module / Router / 动态化）
+# 与 Core 模块协同（Module / Router / 动态化）
 
 本页目标：说明在 Kuikly Compose 中，如何与 Kuikly Core 提供的 **Module / Router / 动态化能力** 协同工作。
 

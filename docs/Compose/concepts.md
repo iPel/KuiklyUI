@@ -1,4 +1,4 @@
-## 核心概念与架构总览
+# 核心概念与架构总览
 
 本页目标：帮你快速建立一张 **「Kuikly 版 Compose 心智图」**，理解 Kuikly 与 Jetpack Compose 在架构上的分工与差异。
 

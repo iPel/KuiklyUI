@@ -1,4 +1,4 @@
-## 布局与组件：对齐与差异概览
+# 布局与组件：对齐与差异概览
 
 本页只关注 **Kuikly 与 Jetpack Compose 的对齐情况和差异点**，基础用法请优先查阅 Jetpack Compose 官方文档。
 

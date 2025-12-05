@@ -1,4 +1,4 @@
-## 多端适配与平台差异
+# 多端适配与平台差异
 
 本页目标：从 **Android / iOS / HarmonyOS / Web / 小程序** 五端视角，总结 Kuikly Compose 在行为上的差异与注意事项。
 
