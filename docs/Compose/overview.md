@@ -1,4 +1,4 @@
-# Compose DSL 概览
+# 概览
 
 ## 适合谁阅读
 - 已有 Jetpack Compose / Android 经验，想要一套 **跨 Android / iOS / Web / 鸿蒙 / 小程序** 的统一 UI 方案的同学

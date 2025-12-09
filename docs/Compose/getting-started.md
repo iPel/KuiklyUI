@@ -77,18 +77,6 @@ private fun HelloComposeScreen() {
 - `setContent {}` 的用法与 Jetpack Compose 基本一致
 - 页面生命周期、路由跳转等能力来自 Kuikly Core，与自研 DSL 页面保持一致
 
-## 文档阅读推荐
+## 下一步
 
-如果你对 Jetpack Compose 还不熟悉，建议先按官方路线补一遍基础：
-
-1. 基础：Composable、State、Recomposition
-2. 布局：Column/Row/Box 与 Modifier
-3. 列表：LazyColumn / LazyRow / Grid
-4. 动画：`animate*AsState`、`AnimatedVisibility`、`updateTransition`
-5. 性能与最佳实践
-
-我们在文档中提供了一页整理好的「Jetpack Compose 官方文档导航」，见：
-
-- [Jetpack Compose 官方文档导航](./official-compose-links.md)
-
-### 下一步
+- 继续阅读：[入门指南](./how-to-read.md)（文档阅读顺序与推荐路径）
