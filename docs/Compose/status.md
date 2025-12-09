@@ -15,73 +15,129 @@
 
 ## 标准Compose API支持概览
 
-### 状态管理
-
-**完全支持**，直接使用官方 `androidx.compose.runtime.*`：
-
-- `remember`、`mutableStateOf`、`derivedStateOf`
-- `LaunchedEffect`、`DisposableEffect`、`SideEffect`
-- `rememberCoroutineScope`、`rememberUpdatedState`
-- 所有状态管理相关的 API
-
-
-### 布局系统
-
-**完全支持**，包括所有布局组件和布局修饰符：
-
-- **基础布局**：`Column`、`Row`、`Box`、`BoxWithConstraints`
-- **流式布局**：`FlowRow`、`FlowColumn`
-- **自定义布局**：`Layout` 组件
-- **布局修饰符**：`padding`、`size`、`fillMaxWidth`、`fillMaxHeight`、`fillMaxSize`、`weight` 等
-
-### 列表与滚动
-
-**完全支持**，包括所有列表组件：
-
-- **列表**：`LazyColumn`、`LazyRow`
-- **网格**：`LazyVerticalGrid`、`LazyHorizontalGrid`
-- **瀑布流**：`LazyVerticalStaggeredGrid`、`LazyHorizontalStaggeredGrid`
-- **轮播**：`HorizontalPager`、`VerticalPager`
-
-### 动画系统
-
-**完全支持**，包括常用动画 API：
-
-- `AnimatedVisibility`、`AnimatedContent`
-- `Crossfade`、`animateContentSize`
-- `Transition`、`updateTransition`
-- `animate*AsState` 系列 API
-
-### 手势系统
-
-**大部分支持**，包括常用手势修饰符：
-
-- 点击与长按：`clickable`、`combinedClickable`
-- 拖拽：`draggable`
-- 变换手势：`transformable`
-- 自定义手势：`pointerInput`
-
-### Material3 组件
-
-**大部分支持**，基于 Compose 1.7 的 Material3 能力做了对齐：  
-- **基础组件**：`Text`、`Button`、`Card`、`Surface`  
-- **页面结构**：`Scaffold`、`TopAppBar` / `CenterAlignedTopAppBar`、`TabRow` / `ScrollableTabRow`、`Tab`  
-- **表单输入**：`TextField`、`Checkbox`、`Switch`、`Slider` / `RangeSlider`  
-- **反馈组件**：`Snackbar` / `SnackbarHost`、`ModalBottomSheet`、`CircularProgressIndicator` / `LinearProgressIndicator`  
-- **其他**：`HorizontalDivider` / `VerticalDivider`、`PullToRefresh`
-
-### 其他功能
-
-- **Canvas**：支持 `Canvas` 组件进行自定义绘制
-- **Modifier**：支持大部分常用 Modifier
-- **ViewModel & Lifecycle**：支持 `viewModel()`、生命周期感知的副作用与状态管理（与官方 Compose Runtime 对齐）
+<table>
+  <colgroup>
+    <col style="width:15%" />
+    <col style="width:17%" />
+    <col style="width:68%" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th>模块</th>
+      <th>支持度</th>
+      <th>覆盖API</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>状态管理</td>
+      <td>完全支持</td>
+      <td>
+        官方 <code>androidx.compose.runtime.*</code><br>
+        <code>remember</code> / <code>mutableStateOf</code> / <code>derivedStateOf</code><br>
+        <code>LaunchedEffect</code> / <code>DisposableEffect</code> / <code>SideEffect</code><br>
+        <code>rememberCoroutineScope</code> / <code>rememberUpdatedState</code> 等
+      </td>
+    </tr>
+    <tr>
+      <td>布局系统</td>
+      <td>完全支持</td>
+      <td>
+        <strong>基础布局</strong>：<code>Column</code> / <code>Row</code> / <code>Box</code> / <code>BoxWithConstraints</code><br>
+        <strong>流式</strong>：<code>FlowRow</code> / <code>FlowColumn</code><br>
+        <strong>自定义</strong>：<code>Layout</code><br>
+        <strong>修饰符</strong>：<code>padding</code>、<code>size</code>、<code>fillMaxWidth/Height/Size</code>、<code>weight</code> 等
+      </td>
+    </tr>
+    <tr>
+      <td>列表与滚动</td>
+      <td>完全支持</td>
+      <td>
+        <strong>列表</strong>：<code>LazyColumn</code> / <code>LazyRow</code><br>
+        <strong>网格</strong>：<code>LazyVerticalGrid</code> / <code>LazyHorizontalGrid</code><br>
+        <strong>瀑布流</strong>：<code>LazyVerticalStaggeredGrid</code> / <code>LazyHorizontalStaggeredGrid</code><br>
+        <strong>轮播</strong>：<code>HorizontalPager</code> / <code>VerticalPager</code>
+      </td>
+    </tr>
+    <tr>
+      <td>动画系统</td>
+      <td>完全支持</td>
+      <td>
+        <code>AnimatedVisibility</code>、<code>AnimatedContent</code>、<code>Crossfade</code><br>
+        <code>animateContentSize</code>、<code>Transition</code> / <code>updateTransition</code><br>
+        <code>animate*AsState</code> 系列
+      </td>
+    </tr>
+    <tr>
+      <td>手势系统</td>
+      <td>大部分支持</td>
+      <td>
+        <code>clickable</code> / <code>combinedClickable</code><br>
+        <code>draggable</code>、<code>transformable</code><br>
+        <code>pointerInput</code> 等常用手势修饰符
+      </td>
+    </tr>
+    <tr>
+      <td>Material3 组件</td>
+      <td>大部分支持</td>
+      <td>
+        <strong>基础</strong>：<code>Text</code> / <code>Button</code> / <code>Card</code> / <code>Surface</code><br>
+        <strong>结构</strong>：<code>Scaffold</code>、<code>TopAppBar</code> / <code>CenterAlignedTopAppBar</code>、<code>TabRow</code> / <code>ScrollableTabRow</code>、<code>Tab</code><br>
+        <strong>表单</strong>：<code>TextField</code>、<code>Checkbox</code>、<code>Switch</code>、<code>Slider</code> / <code>RangeSlider</code><br>
+        <strong>反馈</strong>：<code>Snackbar</code> / <code>SnackbarHost</code>、<code>ModalBottomSheet</code>、<code>CircularProgressIndicator</code> / <code>LinearProgressIndicator</code><br>
+        <strong>其他</strong>：<code>HorizontalDivider</code> / <code>VerticalDivider</code>、<code>PullToRefresh</code>
+      </td>
+    </tr>
+    <tr>
+      <td>其他</td>
+      <td>大部分支持</td>
+      <td>
+        <strong>绘制</strong>：<code>Canvas</code> 自定义绘制<br>
+        <strong>修饰符</strong>：常用 <code>Modifier</code><br>
+        <strong>架构</strong>：<code>viewModel()</code> 与生命周期感知副作用/状态管理（与官方 Runtime 对齐）
+      </td>
+    </tr>
+  </tbody>
+</table>
 
 ## 工具与调试
 
-- **资源管理**：与官方能力对齐，支持常规资源加载与管理
-- **预览**：建设中
-- **Inspector**：可使用各端原生 Inspector（Android / iOS / HarmonyOS）
-- **性能工具**：建设中
+<table>
+  <colgroup>
+    <col style="width:20%" />
+    <col style="width:20%" />
+    <col style="width:60%" />
+  </colgroup>
+  <thead>
+    <tr>
+      <th>项目</th>
+      <th>状态</th>
+      <th>说明</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>资源管理</td>
+      <td>可用</td>
+      <td>与官方 Compose 对齐，支持常规资源加载与管理</td>
+    </tr>
+    <tr>
+      <td>预览</td>
+      <td>建设中</td>
+      <td>规划提供跨端实时预览与快速迭代能力</td>
+    </tr>
+    <tr>
+      <td>Inspector</td>
+      <td>可用</td>
+      <td>可直接使用各端原生 Inspector（Android / iOS / HarmonyOS）</td>
+    </tr>
+    <tr>
+      <td>性能工具</td>
+      <td>建设中</td>
+      <td>规划聚焦重组/Recompose 性能瓶颈的跟踪与定位</td>
+    </tr>
+  </tbody>
+</table>
 
 ## 示例代码
 
