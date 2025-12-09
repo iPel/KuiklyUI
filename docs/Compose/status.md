@@ -83,13 +83,11 @@
 - **Inspector**：可使用各端原生 Inspector（Android / iOS / HarmonyOS）
 - **性能工具**：建设中
 
-
-
 ## 示例代码
 
 我们提供了丰富的 Demo 示例，涵盖组件使用、手势交互、动画效果及列表滚动等核心场景。
 
-- **代码路径**：`demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose/`
+- **代码路径**：[demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose/](https://github.com/Tencent-TDS/KuiklyUI/tree/main/demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose)
 - **特别说明**：所有示例代码均由 AI 直接生成，无需手工调整即可运行。这验证了 Kuikly Compose 的 AI 辅助生成代码目前已处于高可用状态。
 
 ## 反馈与贡献

@@ -77,6 +77,16 @@ private fun HelloComposeScreen() {
 - `setContent {}` 的用法与 Jetpack Compose 基本一致
 - 页面生命周期、路由跳转等能力来自 Kuikly Core，与自研 DSL 页面保持一致
 
+## 包名导入须知
+
+为了实现跨平台并避免与 Android 原生 Compose 冲突，请遵循以下导入规则：
+
+- **Runtime 层（`androidx.compose.runtime.*`）**：
+  直接使用官方包。Kuikly 复用了官方的运行时能力（如 `remember`, `mutableStateOf`）。
+
+- **非 Runtime 层（`com.tencent.kuikly.compose.*`）**：
+  **必须使用 Kuikly 的包名**。这包括 UI 基础（`ui`）、组件库（`material3`、`foundation`）以及动画（`animation`）等所有上层能力，都经过了适配以支持跨平台渲染。
+
 ## 下一步
 
 - 继续阅读：[入门指南](./how-to-read.md)（文档阅读顺序与推荐路径）
