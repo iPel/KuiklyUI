@@ -1,18 +1,29 @@
 # 能力全览
 
-本页介绍 Kuikly Compose 的当前开发状态、已支持的 API 情况以及业务使用现状。
+本页介绍 Kuikly Compose 的当前开发状态、已支持的 API 情况。
 
-## 开发目标
+## 当前可用性
+- **内置模式**：已在腾讯新闻、地图、IMA 等多个业务，超过 100 个页面线上验证，成熟可直接接入使用。
+- **动态化模式（Beta）**：目前在业务灰度验证中，感兴趣的可联系试用接入。
 
-Kuikly Compose 的长期目标是**完全支持标准 Jetpack Compose API**，以实现：
+## 定位与原则
 
-- 与官方 Compose API 100% 对齐
-- 跨端一致的开发体验
-- 无缝迁移官方 Compose 代码
+- **与官方 Compose 对齐 API**：保持 API 形态和行为一致（当前约 95%，持续演进），便于直接迁移和使用官方生态。
+- **AI 辅助编码友好**：因 API 高度对齐，可直接使用 Cursor / Copilot 等 AI 生成 Compose 代码。
+- **跨端一致性与性能**：确保 Android / iOS / HarmonyOS / Web / 小程序一致的交互和性能体验。
+- **差异化与扩展能力**：在对齐的基础上，扩展动态化、跨端特性及与 Kuikly Core 的深度协同，提供超出官方 Compose 的能力。
 
-当前我们正在朝着这个目标持续迭代，已支持标准 Compose API 约 90% 的功能。
+## 标准Compose API支持概览
 
-## 已支持 API 概览
+### 状态管理
+
+**完全支持**，直接使用官方 `androidx.compose.runtime.*`：
+
+- `remember`、`mutableStateOf`、`derivedStateOf`
+- `LaunchedEffect`、`DisposableEffect`、`SideEffect`
+- `rememberCoroutineScope`、`rememberUpdatedState`
+- 所有状态管理相关的 API
+
 
 ### 布局系统
 
@@ -32,30 +43,9 @@ Kuikly Compose 的长期目标是**完全支持标准 Jetpack Compose API**，�
 - **瀑布流**：`LazyVerticalStaggeredGrid`、`LazyHorizontalStaggeredGrid`
 - **轮播**：`HorizontalPager`、`VerticalPager`
 
-### Material3 组件
-
-**大部分支持**，基于 Compose 1.7 的 Material3 能力做了对齐：
-
-- **基础组件**：`Text`、`Button`、`Card`、`Surface`
-- **页面结构**：`Scaffold`、`TopAppBar`、`TabRow`、`Tab`
-- **表单输入**：`TextField`、`OutlinedTextField`、`Checkbox`、`Switch`、`Slider`
-- **反馈组件**：`Snackbar`、`ModalBottomSheet`、`CircularProgressIndicator`、`LinearProgressIndicator`
-- **其他**：`Divider`、`PullToRefreshContainer`
-
-> 注意：部分 Material3 组件的某些参数可能暂时未完全支持，具体以实际表现为准。
-
-### 状态管理
-
-**完全支持**，直接使用官方 `androidx.compose.runtime.*`：
-
-- `remember`、`mutableStateOf`、`derivedStateOf`
-- `LaunchedEffect`、`DisposableEffect`、`SideEffect`
-- `rememberCoroutineScope`、`rememberUpdatedState`
-- 所有状态管理相关的 API
-
 ### 动画系统
 
-**大部分支持**，包括常用动画 API：
+**完全支持**，包括常用动画 API：
 
 - `AnimatedVisibility`、`AnimatedContent`
 - `Crossfade`、`animateContentSize`
@@ -66,60 +56,43 @@ Kuikly Compose 的长期目标是**完全支持标准 Jetpack Compose API**，�
 
 **大部分支持**，包括常用手势修饰符：
 
-- `clickable`、`combinedClickable`
-- `draggable`、`scrollable`、`transformable`
-- 手势冲突处理
+- 点击与长按：`clickable`、`combinedClickable`
+- 拖拽：`draggable`
+- 变换手势：`transformable`
+- 自定义手势：`pointerInput`
+
+### Material3 组件
+
+**大部分支持**，基于 Compose 1.7 的 Material3 能力做了对齐：  
+- **基础组件**：`Text`、`Button`、`Card`、`Surface`  
+- **页面结构**：`Scaffold`、`TopAppBar` / `CenterAlignedTopAppBar`、`TabRow` / `ScrollableTabRow`、`Tab`  
+- **表单输入**：`TextField`、`Checkbox`、`Switch`、`Slider` / `RangeSlider`  
+- **反馈组件**：`Snackbar` / `SnackbarHost`、`ModalBottomSheet`、`CircularProgressIndicator` / `LinearProgressIndicator`  
+- **其他**：`HorizontalDivider` / `VerticalDivider`、`PullToRefresh`
 
 ### 其他功能
 
 - **Canvas**：支持 `Canvas` 组件进行自定义绘制
 - **Modifier**：支持大部分常用 Modifier
-- **主题系统**：支持 `MaterialTheme` 和主题定制
+- **ViewModel & Lifecycle**：支持 `viewModel()`、生命周期感知的副作用与状态管理（与官方 Compose Runtime 对齐）
 
-## 业务使用现状
+## 工具与调试
 
-Kuikly Compose 已在多个业务场景中投入使用：
+- **资源管理**：与官方能力对齐，支持常规资源加载与管理
+- **预览**：建设中
+- **Inspector**：可使用各端原生 Inspector（Android / iOS / HarmonyOS）
+- **性能工具**：建设中
 
-- **新项目/新模块**：推荐优先使用 Kuikly Compose
-- **跨端需求**：需要同时支持 Android、iOS、Web、鸿蒙、小程序的项目
-- **动态化需求**：需要运行时更新 UI 的场景
 
-### 使用建议
 
-- **完全对齐的 API**：可以放心使用，行为与官方 Compose 一致
-- **部分支持的 API**：建议先进行小范围验证，确认满足需求后再大规模使用
-- **遇到问题**：欢迎在 [GitHub Issues](https://github.com/Tencent-TDS/KuiklyUI/issues) 中反馈
+## 示例代码
 
-## 动态化能力（Beta）
+我们提供了丰富的 Demo 示例，涵盖组件使用、手势交互、动画效果及列表滚动等核心场景。
 
-Kuikly Compose 支持动态化能力，目前处于 **Beta 版本**：
-
-### 能力说明
-
-- **热更新**：支持运行时更新 Compose UI
-- **动态下发**：支持服务端下发 UI 配置
-- **混合使用**：可以与自研 DSL 混合使用
-
-### 使用限制
-
-- 动态化能力仍在持续优化中，部分场景可能存在限制
-- 建议在非关键路径先进行验证
-- 如有问题请及时反馈
-
-### 后续规划
-
-- 持续完善动态化能力
-- 提升稳定性和性能
-- 提供更多动态化示例和最佳实践
-
-## 版本信息
-
-- **基于 Compose 版本**：Compose 1.7
-- **Runtime**：直接使用官方 `androidx.compose.runtime.*`
-- **支持平台**：Android、iOS、HarmonyOS、Web、小程序
+- **代码路径**：`demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose/`
+- **特别说明**：所有示例代码均由 AI 直接生成，无需手工调整即可运行。这验证了 Kuikly Compose 的 AI 辅助生成代码目前已处于高可用状态。
 
 ## 反馈与贡献
-
 如果你在使用过程中发现：
 
 - API 支持问题
@@ -130,7 +103,7 @@ Kuikly Compose 支持动态化能力，目前处于 **Beta 版本**：
 欢迎通过以下方式反馈：
 
 - [GitHub Issues](https://github.com/Tencent-TDS/KuiklyUI/issues)
-- 内部反馈渠道（如有）
+- 内部反馈渠道（端框架小助手）
 
 你的反馈将帮助我们持续改进 Kuikly Compose。
 
