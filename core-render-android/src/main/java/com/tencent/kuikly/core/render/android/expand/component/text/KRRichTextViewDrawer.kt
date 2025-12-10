@@ -22,6 +22,9 @@ import android.text.Layout
  * 富文本绘制器，封装 [Layout]，用于富文本视图的测量与绘制。
  */
 internal class KRRichTextViewDrawer(val textLayout: Layout) {
+    internal var selectionStart = -1
+    internal var selectionEnd = -1
+    internal val hasSelection: Boolean get() = 0 <= selectionStart && selectionStart < selectionEnd
 
     /**
      * 将文本内容绘制到 [canvas]，对接到 [Layout.draw]。

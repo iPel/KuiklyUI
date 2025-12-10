@@ -21,8 +21,10 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Paint.FontMetricsInt
+import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.os.Build
 import android.text.Layout
 import android.text.Spannable
 import android.text.SpannableStringBuilder
@@ -43,6 +45,7 @@ import com.tencent.kuikly.core.render.android.const.KRExtConst
 import com.tencent.kuikly.core.render.android.const.KRViewConst
 import com.tencent.kuikly.core.render.android.css.decoration.BoxShadow
 import com.tencent.kuikly.core.render.android.css.ktx.*
+import com.tencent.kuikly.core.render.android.expand.component.KRTextSelector.Companion.findParentTextSelector
 import com.tencent.kuikly.core.render.android.expand.component.text.*
 import com.tencent.kuikly.core.render.android.export.IKuiklyRenderShadowExport
 import com.tencent.kuikly.core.render.android.export.KuiklyRenderCallback
@@ -58,6 +61,17 @@ class KRRichTextView(context: Context) : KRView(context) {
     private var richTextShadow: KRRichTextShadow? = null
     private var textDrawer: KRRichTextViewDrawer? = null
     private var isRichTextMode = false
+    internal var parentTextSelector: KRTextSelector? = null
+
+    override fun onAddToParent(parent: ViewGroup) {
+        super.onAddToParent(parent)
+        parentTextSelector = findParentTextSelector()
+    }
+
+    override fun onRemoveFromParent(parent: ViewGroup) {
+        parentTextSelector = null
+        super.onRemoveFromParent(parent)
+    }
 
     override val reusable: Boolean
         get() = true
@@ -107,6 +121,7 @@ class KRRichTextView(context: Context) : KRView(context) {
             canvas.save()
             canvas.translate(paddingLeft.toFloat(), paddingTop.toFloat())
             it.draw(canvas)
+            parentTextSelector?.drawSelection(this, canvas)
             canvas.restore()
         }
     }
@@ -191,9 +206,175 @@ class KRRichTextView(context: Context) : KRView(context) {
         params.width == ViewGroup.LayoutParams.MATCH_PARENT || params.width == ViewGroup.LayoutParams.WRAP_CONTENT
                 || params.width == 0
 
+    fun setSelectionByCoordinate(
+        x: Float,
+        y: Float,
+        type: SelectionType
+    ): Boolean {
+        textDrawer?.also {
+            it.textLayout?.also { layout ->
+                val size = layout.text.length
+                val position = getOffsetForPosition(layout, x, y)
+                if (0 <= position && position < size) {
+                    setTextSelection(it, position, position + 1)
+                    return true
+                }
+            }
+            setTextSelection(it, INVALID_OFFSET, INVALID_OFFSET)
+            return false
+        }
+        return false
+    }
+
+    fun updateSelectionByCoordinate(
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+        force: Boolean = false
+    ): Boolean {
+        textDrawer?.also {
+            it.textLayout?.also { layout ->
+                var pos1: Int
+                var pos2: Int
+                val size = layout.text.length
+                if (size == 0) {
+                    pos1 = INVALID_OFFSET
+                    pos2 = INVALID_OFFSET
+                } else {
+                    pos1 = getOffsetForPosition(layout, x1, y1)
+                    pos2 = getOffsetForPosition(layout, x2, y2)
+                    if (pos1 == pos2) {
+                        if (force) {
+                            if (pos1 >= size) {
+                                pos1 = size - 1
+                                pos2 = size
+                            } else {
+                                pos2 = pos1 + 1
+                            }
+                        } else {
+                            pos1 = INVALID_OFFSET
+                            pos2 = INVALID_OFFSET
+                        }
+                    } else if (pos1 > pos2) {
+                        val temp = pos1
+                        pos1 = pos2
+                        pos2 = temp
+                    }
+                }
+                setTextSelection(it, pos1, pos2)
+            }
+            return it.hasSelection
+        }
+        return false
+    }
+
+    fun clearSelection() {
+        textDrawer?.also {
+            setTextSelection(it, INVALID_OFFSET, INVALID_OFFSET)
+        }
+    }
+
+    private fun setTextSelection(drawer: KRRichTextViewDrawer, start: Int, end: Int) {
+        if (drawer.selectionStart != start || drawer.selectionEnd != end) {
+            drawer.selectionStart = start
+            drawer.selectionEnd = end
+            invalidate()
+        }
+    }
+
+    private fun getOffsetForPosition(
+        layout: Layout,
+        x: Float,
+        y: Float
+    ): Int {
+        val line: Int = layout.getLineForVertical(y.toInt())
+        if (y < layout.getLineTop(line)) {
+            return layout.getLineStart(line)
+        } else if (y > layout.getLineBottom(line)) {
+            return layout.getLineEnd(line)
+        }
+        val offset: Int = layout.getOffsetForHorizontal(line, x)
+        return offset
+    }
+
+    fun getSelectionStartPosition(): Pair<Float, Float> {
+        val it = textDrawer!!
+        return getPositionForOffset(it.textLayout!!, it.selectionStart)
+    }
+
+    fun getSelectionEndPosition(): Pair<Float, Float> {
+        val it = textDrawer!!
+        return getPositionForOffset(it.textLayout!!, it.selectionEnd)
+    }
+
+    private fun getPositionForOffset(layout: Layout, offset: Int): Pair<Float, Float> {
+        val line: Int = layout.getLineForOffset(offset)
+        val x: Float = layout.getPrimaryHorizontal(offset)
+        val y: Float = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            layout.getLineBottom(line, false)
+        } else {
+            layout.getLineBottom(line)
+        }).toFloat()
+        return Pair(x, y)
+    }
+
+    fun getSelectionRect(dest: Rect): Boolean {
+        textDrawer?.also {
+            it.textLayout?.also { layout ->
+                if (it.hasSelection) {
+                    val startline: Int = layout.getLineForOffset(it.selectionStart)
+                    val endline: Int = layout.getLineForOffset(it.selectionEnd)
+                    dest.top = layout.getLineTop(startline)
+                    dest.bottom = layout.getLineBottom(endline)
+                    if (startline == endline) {
+                        dest.left = layout.getPrimaryHorizontal(it.selectionStart).toInt()
+                        dest.right = layout.getPrimaryHorizontal(it.selectionEnd).toInt()
+                    } else {
+                        dest.left = 0
+                        dest.right = layout.width
+                    }
+                    return true
+                }
+            }
+        }
+        dest.left = 0
+        dest.top = 0
+        dest.right = 0
+        dest.bottom = 0
+        return false
+    }
+
+    /**
+     * get selection path
+     *
+     * @return weather has selection
+     */
+    fun getSelectionPath(dest: Path): Boolean {
+        textDrawer?.also {
+            if (it.selectionStart < 0 || it.selectionEnd < 0 || it.selectionStart == it.selectionEnd) {
+                return false
+            }
+            val layout = it.textLayout ?: return false
+            layout.getSelectionPath(it.selectionStart, it.selectionEnd, dest)
+            return true
+        }
+        return false
+    }
+
+    fun getSelectionText(): String {
+        textDrawer?.also {
+            if (it.hasSelection) {
+                return it.textLayout!!.text.substring(it.selectionStart, it.selectionEnd)
+            }
+        }
+        return ""
+    }
+
     companion object {
         const val VIEW_NAME = "KRRichTextView"
         const val GRADIENT_RICH_TEXT_VIEW = "KRGradientRichTextView"
+        private const val INVALID_OFFSET = -1
     }
 }
 
@@ -770,4 +951,11 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
         private const val METHOD_GET_PLACEHOLDER_SPAN_RECT = "spanRect"
         private const val METHOD_IS_LINE_BREAK_MARGIN = "isLineBreakMargin"
     }
+}
+
+enum class SelectionType {
+    CHARACTER,
+    WORD,
+    PARAGRAPH,
+    SENTENCE
 }
