@@ -3,11 +3,12 @@ package com.tencent.kuikly.core.render.android.expand.component
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
-import android.graphics.Rect
+import android.graphics.RectF
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import com.tencent.kuikly.core.render.android.adapter.KuiklyRenderLog
+import com.tencent.kuikly.core.render.android.css.ktx.toDpF
 import com.tencent.kuikly.core.render.android.css.ktx.toPxF
 import com.tencent.kuikly.core.render.android.export.KuiklyRenderCallback
 import org.json.JSONObject
@@ -96,7 +97,7 @@ internal class KRTextSelector(private val view: KRView) {
     private inline val kuiklyContext get() = view.kuiklyRenderContext
 
     private val reusableTextViewList = ArrayList<Triple<KRRichTextView, Int, Int>>()
-    private val reusableRect = Rect()
+    private val reusableRect = RectF()
     private val reusablePath = Path()
 
     private val selectionPaint = Paint().also {
@@ -126,7 +127,7 @@ internal class KRTextSelector(private val view: KRView) {
      * active selecting mode
      */
     private var active: Boolean = false
-    private var selectionRect = Rect()
+    private var selectionRect = RectF()
 
     // dragging variables
     private var dragging = false
@@ -353,10 +354,10 @@ internal class KRTextSelector(private val view: KRView) {
         var lastY: Int = Int.MIN_VALUE
         var lastView: KRRichTextView? = null
 
-        var selectionLeft = Int.MAX_VALUE
-        var selectionTop = Int.MAX_VALUE
-        var selectionRight = Int.MIN_VALUE
-        var selectionBottom = Int.MIN_VALUE
+        var selectionLeft = Float.MAX_VALUE
+        var selectionTop = Float.MAX_VALUE
+        var selectionRight = Float.MIN_VALUE
+        var selectionBottom = Float.MIN_VALUE
 
         forEachText { offsetX, offsetY ->
             // 判断相交
@@ -437,10 +438,10 @@ internal class KRTextSelector(private val view: KRView) {
         val oldCursorEndY = cursorEndY
         var foundStart = false
         var foundEnd = false
-        var selectionLeft = Int.MAX_VALUE
-        var selectionTop = Int.MAX_VALUE
-        var selectionRight = Int.MIN_VALUE
-        var selectionBottom = Int.MIN_VALUE
+        var selectionLeft = Float.MAX_VALUE
+        var selectionTop = Float.MAX_VALUE
+        var selectionRight = Float.MIN_VALUE
+        var selectionBottom = Float.MIN_VALUE
         for (i in 0 until reusableTextViewList.size) {
             val (textView, offsetX, offsetY) = reusableTextViewList[i]
             if (foundEnd) {
@@ -549,6 +550,13 @@ internal class KRTextSelector(private val view: KRView) {
         // TODO clean up
     }
 
+    private fun generateSelectEventParam() = mapOf(
+        "x" to kuiklyContext.toDpF(selectionRect.left),
+        "y" to kuiklyContext.toDpF(selectionRect.top),
+        "width" to kuiklyContext.toDpF(selectionRect.width()),
+        "height" to kuiklyContext.toDpF(selectionRect.height())
+    )
+
     private fun notifySelectStart() {
         active = true
         view.isFocusableInTouchMode = true
@@ -557,33 +565,18 @@ internal class KRTextSelector(private val view: KRView) {
                 clearSelection()
             }
         }
-        selectStartCallback?.invoke(mapOf(
-            "x" to selectionRect.left,
-            "y" to selectionRect.top,
-            "width" to selectionRect.width(),
-            "height" to selectionRect.height()
-        ))
+        selectStartCallback?.invoke(generateSelectEventParam())
         view.invalidate()
         view.requestFocus()
     }
 
     private fun notifySelectChange() {
-        selectChangeCallback?.invoke(mapOf(
-            "x" to selectionRect.left,
-            "y" to selectionRect.top,
-            "width" to selectionRect.width(),
-            "height" to selectionRect.height()
-        ))
+        selectChangeCallback?.invoke(generateSelectEventParam())
         view.invalidate()
     }
 
     private fun notifySelectEnd() {
-        selectEndCallback?.invoke(mapOf(
-            "x" to selectionRect.left,
-            "y" to selectionRect.top,
-            "width" to selectionRect.width(),
-            "height" to selectionRect.height()
-        ))
+        selectEndCallback?.invoke(generateSelectEventParam())
         view.invalidate()
     }
 

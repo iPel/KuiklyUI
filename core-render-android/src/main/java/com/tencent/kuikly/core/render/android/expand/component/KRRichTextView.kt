@@ -23,6 +23,7 @@ import android.graphics.Paint
 import android.graphics.Paint.FontMetricsInt
 import android.graphics.Path
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.Typeface
 import android.os.Build
 import android.text.Layout
@@ -319,29 +320,29 @@ class KRRichTextView(context: Context) : KRView(context) {
         return Pair(x, y)
     }
 
-    fun getSelectionRect(dest: Rect): Boolean {
+    fun getSelectionRect(dest: RectF): Boolean {
         textDrawer?.also {
             it.textLayout?.also { layout ->
                 if (it.hasSelection) {
                     val startline: Int = layout.getLineForOffset(it.selectionStart)
                     val endline: Int = layout.getLineForOffset(it.selectionEnd)
-                    dest.top = layout.getLineTop(startline)
-                    dest.bottom = layout.getLineBottom(endline)
+                    dest.top = layout.getLineTop(startline).toFloat()
+                    dest.bottom = layout.getLineBottom(endline).toFloat()
                     if (startline == endline) {
-                        dest.left = layout.getPrimaryHorizontal(it.selectionStart).toInt()
-                        dest.right = layout.getPrimaryHorizontal(it.selectionEnd).toInt()
+                        dest.left = layout.getPrimaryHorizontal(it.selectionStart)
+                        dest.right = layout.getPrimaryHorizontal(it.selectionEnd)
                     } else {
-                        dest.left = 0
-                        dest.right = layout.width
+                        dest.left = 0f
+                        dest.right = layout.width.toFloat()
                     }
                     return true
                 }
             }
         }
-        dest.left = 0
-        dest.top = 0
-        dest.right = 0
-        dest.bottom = 0
+        dest.left = 0f
+        dest.top = 0f
+        dest.right = 0f
+        dest.bottom = 0f
         return false
     }
 
