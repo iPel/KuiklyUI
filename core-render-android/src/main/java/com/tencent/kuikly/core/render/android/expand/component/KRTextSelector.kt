@@ -236,10 +236,12 @@ internal class KRTextSelector(private val view: KRView) {
     }
 
     fun destroy() {
-        logInfo { "dismiss" }
-        forEachText { _, _ ->
-            clearSelection()
-            parentTextSelector = null
+        logInfo { "destroy" }
+        if (selectable != SELECTABLE_DISABLE) {
+            forEachText { _, _ ->
+                clearSelection()
+                parentTextSelector = null
+            }
         }
     }
 
