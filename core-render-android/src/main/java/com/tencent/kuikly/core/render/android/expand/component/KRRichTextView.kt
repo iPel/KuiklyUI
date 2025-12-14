@@ -207,6 +207,9 @@ class KRRichTextView(context: Context) : KRView(context) {
         params.width == ViewGroup.LayoutParams.MATCH_PARENT || params.width == ViewGroup.LayoutParams.WRAP_CONTENT
                 || params.width == 0
 
+    /**
+     * set selection by one point coordinate
+     */
     fun setSelectionByCoordinate(
         x: Float,
         y: Float,
@@ -215,10 +218,30 @@ class KRRichTextView(context: Context) : KRView(context) {
         textDrawer?.also {
             it.textLayout?.also { layout ->
                 val size = layout.text.length
-                val position = getOffsetForPosition(layout, x, y)
-                if (0 <= position && position < size) {
-                    setTextSelection(it, position, position + 1)
-                    return true
+                if (size > 0) {
+                    val position = getOffsetForPosition(
+                        layout, x, y,
+                        checkStartEdge = false,
+                        checkEndEdge = true
+                    )
+                    if (0 <= position && position < size) {
+                        when (type) {
+                            SelectionType.CHARACTER -> {
+                                var line = layout.getLineForOffset(position)
+                                if (y < layout.getLineTop(line) && position > 0) {
+                                    setTextSelection(it, position - 1, position)
+                                } else {
+                                    setTextSelection(it, position, position + 1)
+                                }
+                            }
+
+                            else -> {
+                                // todo handle word and paragraph
+                                setTextSelection(it, position, position + 1)
+                            }
+                        }
+                        return true
+                    }
                 }
             }
             setTextSelection(it, INVALID_OFFSET, INVALID_OFFSET)
@@ -227,11 +250,16 @@ class KRRichTextView(context: Context) : KRView(context) {
         return false
     }
 
-    fun updateSelectionByCoordinate(
+    /**
+     * set selection by two point coordinates
+     */
+    fun setSelectionByCoordinates(
         x1: Float,
         y1: Float,
         x2: Float,
         y2: Float,
+        checkStartEdge: Boolean,
+        checkEndEdge: Boolean,
         force: Boolean = false
     ): Boolean {
         textDrawer?.also {
@@ -243,8 +271,8 @@ class KRRichTextView(context: Context) : KRView(context) {
                     pos1 = INVALID_OFFSET
                     pos2 = INVALID_OFFSET
                 } else {
-                    pos1 = getOffsetForPosition(layout, x1, y1)
-                    pos2 = getOffsetForPosition(layout, x2, y2)
+                    pos1 = getOffsetForPosition(layout, x1, y1, checkStartEdge, checkEndEdge)
+                    pos2 = getOffsetForPosition(layout, x2, y2, checkStartEdge, checkEndEdge)
                     if (pos1 == pos2) {
                         if (force) {
                             if (pos1 >= size) {
@@ -287,12 +315,19 @@ class KRRichTextView(context: Context) : KRView(context) {
     private fun getOffsetForPosition(
         layout: Layout,
         x: Float,
-        y: Float
+        y: Float,
+        checkStartEdge: Boolean,
+        checkEndEdge: Boolean
     ): Int {
         val line: Int = layout.getLineForVertical(y.toInt())
-        if (y < layout.getLineTop(line)) {
-            return layout.getLineStart(line)
-        } else if (y > layout.getLineBottom(line)) {
+        if (checkStartEdge && line == 0 && y < layout.getLineTop(0)) {
+            return 0
+        }
+        if (checkEndEdge && line == layout.lineCount - 1 && y > layout.getLineBottom(line)) {
+            return layout.text.length
+        }
+        if ((x > width && layout.getParagraphDirection(line) == Layout.DIR_LEFT_TO_RIGHT) ||
+            (x < 0 && layout.getParagraphDirection(line) == Layout.DIR_RIGHT_TO_LEFT)) {
             return layout.getLineEnd(line)
         }
         val offset: Int = layout.getOffsetForHorizontal(line, x)

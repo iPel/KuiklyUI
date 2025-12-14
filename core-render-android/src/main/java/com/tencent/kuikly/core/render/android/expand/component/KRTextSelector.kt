@@ -1,7 +1,6 @@
 package com.tencent.kuikly.core.render.android.expand.component
 
 import android.animation.ValueAnimator
-import android.annotation.SuppressLint
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -193,6 +192,7 @@ internal class KRTextSelector(private val view: KRView) {
                 dragFixedY = cursorStartY - dragDescent
                 dragMovableX = touchDownX
                 dragMovableY = cursorEndY - dragDescent
+                view.invalidate()
                 return true
             } else if (x >= cursorStartX - cursorWidth - cursorHitExtra &&
                 x <= cursorStartX + cursorHitExtra &&
@@ -205,6 +205,7 @@ internal class KRTextSelector(private val view: KRView) {
                 dragFixedY = cursorEndY - dragDescent
                 dragMovableX = touchDownX
                 dragMovableY = cursorStartY - dragDescent
+                view.invalidate()
                 return true
             }
         }
@@ -223,7 +224,17 @@ internal class KRTextSelector(private val view: KRView) {
         val x2 = dragMovableX + deltaX
         val y2 = dragMovableY + deltaY
 
-        updateSelectionByCoordinate(x1, y1, x2, y2)
+        val oldSelectionRectLeft = selectionRect.left
+        val oldSelectionRectTop = selectionRect.top
+        val oldSelectionRectRight = selectionRect.right
+        val oldSelectionRectBottom = selectionRect.bottom
+        updateSelection(x1, y1, x2, y2)
+        if (selectionRect.left != oldSelectionRectLeft ||
+            selectionRect.top != oldSelectionRectTop ||
+            selectionRect.right != oldSelectionRectRight ||
+            selectionRect.bottom != oldSelectionRectBottom) {
+            notifySelectChange()
+        }
         magnifierAnimator?.show(x, if (draggingCursorStart()) cursorStartY else cursorEndY)
         return true
     }
@@ -242,11 +253,6 @@ internal class KRTextSelector(private val view: KRView) {
         magnifierAnimator?.dismiss()
         notifySelectEnd()
         return true
-    }
-
-    fun performLongClick(): Boolean {
-        // todo support long click
-        return false
     }
 
     fun performBackPressed(): Boolean {
@@ -272,7 +278,6 @@ internal class KRTextSelector(private val view: KRView) {
             return
         }
         selectable = option
-        view.isLongClickable = enabled
         if (!enabled) {
             clearSelection()
         }
@@ -308,7 +313,7 @@ internal class KRTextSelector(private val view: KRView) {
         val wasActive = active
         if (active) {
             forEachText { _, _ ->
-                clearSelection()
+                this.clearSelection()
             }
         }
         val x = kuiklyContext.toPxF(option.optDouble("x").toFloat())
@@ -320,11 +325,36 @@ internal class KRTextSelector(private val view: KRView) {
             SELECTION_TYPE_SENTENCE -> SelectionType.SENTENCE
             else -> SelectionType.WORD
         }
+
+        val oldSelectionRectLeft = selectionRect.left
+        val oldSelectionRectTop = selectionRect.top
+        val oldSelectionRectRight = selectionRect.right
+        val oldSelectionRectBottom = selectionRect.bottom
+        active = createSelectionInternal(x, y, type)
+        if (active) {
+            if (!wasActive) {
+                notifySelectStart()
+            } else if (selectionRect.left != oldSelectionRectLeft ||
+                selectionRect.top != oldSelectionRectTop ||
+                selectionRect.right != oldSelectionRectRight ||
+                selectionRect.bottom != oldSelectionRectBottom) {
+                notifySelectChange()
+            }
+        } else if (wasActive) {
+            notifySelectCancel()
+        }
+    }
+
+    /**
+     * create selection at coordinate
+     * @return whether selection is created successfully
+     */
+    private fun createSelectionInternal(x: Float, y: Float, type: SelectionType): Boolean {
         reusableTextViewList.clear()
         forEachText { offsetX, offsetY ->
             // 判断相交
-            if (x < offsetX + this.width && x > offsetX &&
-                y < offsetY + this.height && y > offsetY &&
+            if (x < offsetX + this.width && x >= offsetX &&
+                y < offsetY + this.height && y >= offsetY &&
                 this.visibility == View.VISIBLE
             ) {
                 reusableTextViewList.add(Triple(this, offsetX, offsetY))
@@ -352,22 +382,18 @@ internal class KRTextSelector(private val view: KRView) {
                 selectionRect.top = reusableRect.top + offsetY
                 selectionRect.right = reusableRect.right + offsetX
                 selectionRect.bottom = reusableRect.bottom + offsetY
-                if (!wasActive) {
-                    notifySelectStart()
-                } else {
-                    notifySelectChange()
-                }
-                break
+                return true
             }
         }
-        if (wasActive && !active) {
-            clearSelection()
-        }
+        cursorStartX = Float.NaN
+        cursorStartY = Float.NaN
+        cursorEndX = Float.NaN
+        cursorEndY = Float.NaN
+        return false
     }
 
     fun selectAll() {
         logInfo { "select all active=$active" }
-        val wasActive = active
         val width = view.width.toFloat()
         val height = view.height.toFloat()
 
@@ -384,13 +410,14 @@ internal class KRTextSelector(private val view: KRView) {
         var selectionBottom = Float.MIN_VALUE
 
         forEachText { offsetX, offsetY ->
-            // 判断相交
             if (this.visibility == View.VISIBLE) {
-                val hit = updateSelectionByCoordinate(
+                val hit = setSelectionByCoordinates(
                     -offsetX.toFloat(),
                     -offsetY.toFloat(),
                     width - offsetX,
-                    height - offsetY
+                    height - offsetY,
+                    checkStartEdge = true,
+                    checkEndEdge = true
                 )
                 if (hit) {
                     if (offsetY < firstY || (offsetY == firstY && offsetX < firstX)) {
@@ -420,19 +447,27 @@ internal class KRTextSelector(private val view: KRView) {
                 cursorEndX = x + lastX
                 cursorEndY = y + lastY
             }
+            val oldSelectionRectLeft = selectionRect.left
+            val oldSelectionRectTop = selectionRect.top
+            val oldSelectionRectRight = selectionRect.right
+            val oldSelectionRectBottom = selectionRect.bottom
             selectionRect.left = selectionLeft
             selectionRect.top = selectionTop
             selectionRect.right = selectionRight
             selectionRect.bottom = selectionBottom
-            if (!wasActive) {
+            if (!active) {
+                active = true
                 notifySelectStart()
-            } else {
+            } else if (selectionRect.left != oldSelectionRectLeft ||
+                selectionRect.top != oldSelectionRectTop ||
+                selectionRect.right != oldSelectionRectRight ||
+                selectionRect.bottom != oldSelectionRectBottom) {
                 notifySelectChange()
             }
         }
     }
 
-    private fun updateSelectionByCoordinate(
+    private fun updateSelection(
         startX: Float,
         startY: Float,
         endX: Float,
@@ -440,14 +475,11 @@ internal class KRTextSelector(private val view: KRView) {
     ) {
         logInfo { "updateSelectionByCoordinate: ($startX,$startY)-($endX,$endY)" }
         reusableTextViewList.clear()
-        val minX = minOf(startX, endX)
         val minY = minOf(startY, endY)
-        val maxX = maxOf(startX, endX)
         val maxY = maxOf(startY, endY)
         forEachText { offsetX, offsetY ->
             // 判断相交
-            if (minX < offsetX + this.width && maxX > offsetX &&
-                minY < offsetY + this.height && maxY > offsetY &&
+            if (minY < offsetY + this.height && maxY >= offsetY &&
                 this.visibility == View.VISIBLE
             ) {
                 reusableTextViewList.add(Triple(this, offsetX, offsetY))
@@ -461,27 +493,26 @@ internal class KRTextSelector(private val view: KRView) {
             Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
         )
 
-        val oldCursorStartX = cursorStartX
-        val oldCursorStartY = cursorStartY
-        val oldCursorEndX = cursorEndX
-        val oldCursorEndY = cursorEndY
-        var foundStart = false
+        var foundStartIndex = -1
         var foundEnd = false
         var selectionLeft = Float.MAX_VALUE
         var selectionTop = Float.MAX_VALUE
         var selectionRight = Float.MIN_VALUE
         var selectionBottom = Float.MIN_VALUE
-        for (i in 0 until reusableTextViewList.size) {
+        val size = reusableTextViewList.size
+        for (i in 0 until size) {
             val (textView, offsetX, offsetY) = reusableTextViewList[i]
             if (foundEnd) {
                 textView.clearSelection()
                 continue
             }
-            val hit = textView.updateSelectionByCoordinate(
+            val hit = textView.setSelectionByCoordinates(
                 startX - offsetX,
                 startY - offsetY,
                 endX - offsetX,
-                endY - offsetY
+                endY - offsetY,
+                checkStartEdge = foundStartIndex != -1, // don't check for first select item
+                checkEndEdge = i != size - 1 // don't check for last select item
             )
             if (hit) {
                 textView.getSelectionRect(reusableRect)
@@ -490,33 +521,39 @@ internal class KRTextSelector(private val view: KRView) {
                 selectionRight = maxOf(selectionRight, reusableRect.right + offsetX)
                 selectionBottom = maxOf(selectionBottom, reusableRect.bottom + offsetY)
             }
-            if (!foundStart && hit) {
+            if (foundStartIndex == -1 && hit) {
                 logInfo { "start hit i=$i view hash=${textView.hashCode()}" }
-                foundStart = true
+                foundStartIndex = i
                 textView.getSelectionStartPosition().also { (x, y) ->
                     cursorStartX = x + offsetX
                     cursorStartY = y + offsetY
                 }
-            } else if (foundStart && !hit) {
+            } else if (foundStartIndex != -1 && !hit) {
                 logInfo { "end hit i=$i view hash=${textView.hashCode()}" }
                 foundEnd = true
                 val (endTextView, endOffsetX, endOffsetY) = reusableTextViewList[i - 1]
+                // the previous item is the last selected one,
+                // call updateSelectionByCoordinate again with checkEndEdge = false
+                endTextView.setSelectionByCoordinates(
+                    startX - endOffsetX,
+                    startY - endOffsetY,
+                    endX - endOffsetX,
+                    endY - endOffsetY,
+                    foundStartIndex != i - 1,
+                    false
+                )
                 endTextView.getSelectionEndPosition().also { (x, y) ->
                     cursorEndX = x + endOffsetX
                     cursorEndY = y + endOffsetY
                 }
             }
         }
-        if (!foundStart) {
+        if (foundStartIndex == -1) {
             // restore old position
-            val dragDescent = kuiklyContext.toPxF(DRAG_DESCENT)
-            restoreSelection(
-                oldCursorStartX,
-                oldCursorStartY - dragDescent,
-                oldCursorEndX,
-                oldCursorEndY - dragDescent
-            )
-        } else if (!foundEnd) {
+            restoreSelection(dragFixedX, dragFixedY)
+            return
+        }
+        if (!foundEnd) {
             // update end position to last
             val (textView, offsetX, offsetY) = reusableTextViewList.last()
             textView.getSelectionEndPosition().also { (x, y) ->
@@ -524,59 +561,20 @@ internal class KRTextSelector(private val view: KRView) {
                 cursorEndY = y + offsetY
             }
         }
-        if (oldCursorStartX != cursorStartX || oldCursorStartY != cursorStartY ||
-            oldCursorEndX != cursorEndX || oldCursorEndY != cursorEndY
-        ) {
-            selectionRect.left = selectionLeft
-            selectionRect.top = selectionTop
-            selectionRect.right = selectionRight
-            selectionRect.bottom = selectionBottom
-            notifySelectChange()
-        }
+        selectionRect.left = selectionLeft
+        selectionRect.top = selectionTop
+        selectionRect.right = selectionRight
+        selectionRect.bottom = selectionBottom
     }
 
-    private fun restoreSelection(startX: Float, startY: Float, endX: Float, endY: Float) {
-        reusableTextViewList.clear()
-        val minX = minOf(startX, endX)
-        val minY = minOf(startY, endY)
-        val maxX = maxOf(startX, endX)
-        val maxY = maxOf(startY, endY)
-        forEachText { offsetX, offsetY ->
-            // 判断相交
-            if (minX < offsetX + this.width && maxX > offsetX &&
-                minY < offsetY + this.height && maxY > offsetY &&
-                this.visibility == View.VISIBLE
-            ) {
-                reusableTextViewList.add(Triple(this, offsetX, offsetY))
-            }
-        }
-        if (reusableTextViewList.isEmpty()) {
+    private fun restoreSelection(x: Float, y: Float) {
+        logInfo { "restore selection to ($x,$y)" }
+        val result = createSelectionInternal(x, y, SelectionType.CHARACTER)
+        if (!result) {
             // this should never happen
             logInfo { "restore selection failed" }
             // TODO clean up
-            return
         }
-        // sort by position, top to bottom, left to right
-        reusableTextViewList.sortWith(
-            Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
-        )
-        for (i in reusableTextViewList.size - 1 downTo 0) {
-            val (textView, offsetX, offsetY) = reusableTextViewList[i]
-            val hit = textView.updateSelectionByCoordinate(
-                startX - offsetX,
-                startY - offsetY,
-                endX - offsetX,
-                endY - offsetY,
-                i == 0
-            )
-            if (hit) {
-                logInfo { "restore selection hit i=$i view hash=${textView.hashCode()}" }
-                return
-            }
-        }
-        // this should never happen too
-        logInfo { "restore selection hit failed" }
-        // TODO clean up
     }
 
     private fun generateSelectEventParam() = mapOf(
@@ -587,11 +585,10 @@ internal class KRTextSelector(private val view: KRView) {
     )
 
     private fun notifySelectStart() {
-        active = true
         view.isFocusableInTouchMode = true
         view.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
             if (!hasFocus) {
-                clearSelection()
+                this@KRTextSelector.clearSelection()
             }
         }
         selectStartCallback?.invoke(generateSelectEventParam())
@@ -613,7 +610,6 @@ internal class KRTextSelector(private val view: KRView) {
         view.onFocusChangeListener = null
         view.isFocusable = false
         view.clearFocus()
-        active = false
         selectCancelCallback?.invoke(null)
         view.invalidate()
     }
@@ -636,6 +632,7 @@ internal class KRTextSelector(private val view: KRView) {
     fun clearSelection() {
         logInfo { "clearSelection" }
         if (active) {
+            active = false
             forEachText { _, _ ->
                 clearSelection()
             }
@@ -729,7 +726,12 @@ internal class KRTextSelector(private val view: KRView) {
 private class MagnifierMotionAnimator
 @RequiresApi(Build.VERSION_CODES.P) constructor(view: View) {
     // The magnifier being animated.
-    private val mMagnifier: Magnifier
+    private val mMagnifier: Magnifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        Magnifier.Builder(view).build()
+    } else {
+        @Suppress("DEPRECATION", "NewApi")
+        Magnifier(view)
+    }
 
     // Prepare the animator used to run the motion animation.
     private val mAnimator: ValueAnimator = ValueAnimator.ofFloat(0f, 1f)
@@ -750,7 +752,6 @@ private class MagnifierMotionAnimator
     private var mLastY = 0f
 
     init {
-        mMagnifier = Magnifier(view)
         mAnimator.setDuration(DURATION)
         mAnimator.interpolator = LinearInterpolator()
         mAnimator.addUpdateListener(ValueAnimator.AnimatorUpdateListener { animation: ValueAnimator? ->
@@ -771,7 +772,7 @@ private class MagnifierMotionAnimator
      */
     fun show(x: Float, y: Float) {
         val startNewAnimation = mMagnifierIsShowing && y != mLastY
-        println("pel show magnifier x=$x y=$y startNewAnimation=$startNewAnimation")
+        // println("pel show magnifier x=$x y=$y startNewAnimation=$startNewAnimation")
 
         if (startNewAnimation) {
             if (mAnimator.isRunning()) {

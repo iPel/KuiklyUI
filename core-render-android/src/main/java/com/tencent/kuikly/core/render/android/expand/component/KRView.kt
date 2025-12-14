@@ -301,12 +301,6 @@ open class KRView(context: Context) : FrameLayout(context), IKuiklyRenderViewExp
         return result || touchResult
     }
 
-    override fun performLongClick(): Boolean {
-        val handled = super.performLongClick()
-        val selectHandled = textSelector?.performLongClick() ?: false
-        return handled || selectHandled
-    }
-
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
         if (keyCode == KeyEvent.KEYCODE_BACK && textSelector?.performBackPressed() == true) {
             return true
