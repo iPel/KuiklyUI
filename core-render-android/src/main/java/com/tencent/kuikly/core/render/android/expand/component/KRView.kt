@@ -355,7 +355,6 @@ open class KRView(context: Context) : FrameLayout(context), IKuiklyRenderViewExp
             -1
         }
         drawCommonDecoration(canvas)
-        textSelector?.prepareDraw()
         super.draw(canvas)
         if (checkpoint != -1) {
             canvas.restoreToCount(checkpoint)

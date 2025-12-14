@@ -1,18 +1,23 @@
 package com.tencent.kuikly.core.render.android.expand.component
 
+import android.animation.ValueAnimator
+import android.annotation.SuppressLint
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.os.Build
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.animation.LinearInterpolator
+import android.widget.Magnifier
+import androidx.annotation.RequiresApi
 import com.tencent.kuikly.core.render.android.adapter.KuiklyRenderLog
 import com.tencent.kuikly.core.render.android.css.ktx.toDpF
 import com.tencent.kuikly.core.render.android.css.ktx.toPxF
 import com.tencent.kuikly.core.render.android.export.KuiklyRenderCallback
 import org.json.JSONObject
-import java.util.ArrayList
 
 private const val DEBUG_LOG = true
 
@@ -136,6 +141,21 @@ internal class KRTextSelector(private val view: KRView) {
     private var dragMovableX: Float = Float.NaN
     private var dragMovableY: Float = Float.NaN
 
+    // magnifier support
+    private val magnifierAnimator by lazy(LazyThreadSafetyMode.NONE) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            MagnifierMotionAnimator(view)
+        } else {
+            null
+        }
+    }
+
+    private val updateMagnifierRunnable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        Runnable { magnifierAnimator!!.update() }
+    } else {
+        null
+    }
+
     init {
         forEachText { _, _ -> parentTextSelector = this@KRTextSelector }
     }
@@ -204,6 +224,7 @@ internal class KRTextSelector(private val view: KRView) {
         val y2 = dragMovableY + deltaY
 
         updateSelectionByCoordinate(x1, y1, x2, y2)
+        magnifierAnimator?.show(x, if (draggingCursorStart()) cursorStartY else cursorEndY)
         return true
     }
 
@@ -218,6 +239,7 @@ internal class KRTextSelector(private val view: KRView) {
         dragMovableY = Float.NaN
         touchDownX = Float.NaN
         touchDownY = Float.NaN
+        magnifierAnimator?.dismiss()
         notifySelectEnd()
         return true
     }
@@ -410,7 +432,12 @@ internal class KRTextSelector(private val view: KRView) {
         }
     }
 
-    private fun updateSelectionByCoordinate(startX: Float, startY: Float, endX: Float, endY: Float) {
+    private fun updateSelectionByCoordinate(
+        startX: Float,
+        startY: Float,
+        endX: Float,
+        endY: Float
+    ) {
         logInfo { "updateSelectionByCoordinate: ($startX,$startY)-($endX,$endY)" }
         reusableTextViewList.clear()
         val minX = minOf(startX, endX)
@@ -625,10 +652,6 @@ internal class KRTextSelector(private val view: KRView) {
         }
     }
 
-    fun prepareDraw() {
-
-    }
-
     fun drawCursor(canvas: Canvas) {
         if (!active) {
             return
@@ -697,4 +720,99 @@ internal class KRTextSelector(private val view: KRView) {
         return false
     }
 
+}
+
+/**
+ * A value animator used to animate the magnifier.
+ * copy from Android TextView source code.
+ */
+private class MagnifierMotionAnimator
+@RequiresApi(Build.VERSION_CODES.P) constructor(view: View) {
+    // The magnifier being animated.
+    private val mMagnifier: Magnifier
+
+    // Prepare the animator used to run the motion animation.
+    private val mAnimator: ValueAnimator = ValueAnimator.ofFloat(0f, 1f)
+
+    // Whether the magnifier is currently visible.
+    private var mMagnifierIsShowing = false
+
+    // The coordinates of the magnifier when the currently running animation started.
+    private var mAnimationStartX = 0f
+    private var mAnimationStartY = 0f
+
+    // The coordinates of the magnifier in the latest animation frame.
+    private var mAnimationCurrentX = 0f
+    private var mAnimationCurrentY = 0f
+
+    // The latest coordinates the motion animator was asked to #show() the magnifier at.
+    private var mLastX = 0f
+    private var mLastY = 0f
+
+    init {
+        mMagnifier = Magnifier(view)
+        mAnimator.setDuration(DURATION)
+        mAnimator.interpolator = LinearInterpolator()
+        mAnimator.addUpdateListener(ValueAnimator.AnimatorUpdateListener { animation: ValueAnimator? ->
+            // Interpolate to find the current position of the magnifier.
+            mAnimationCurrentX =
+                (mAnimationStartX + (mLastX - mAnimationStartX) * animation!!.animatedFraction)
+            mAnimationCurrentY =
+                (mAnimationStartY + (mLastY - mAnimationStartY) * animation.animatedFraction)
+            mMagnifier.show(mAnimationCurrentX, mAnimationCurrentY)
+        })
+    }
+
+    /**
+     * Shows the magnifier at a new position.
+     * If the y coordinate is different from the previous y coordinate
+     * (probably corresponding to a line jump in the text), a short
+     * animation is added to the jump.
+     */
+    fun show(x: Float, y: Float) {
+        val startNewAnimation = mMagnifierIsShowing && y != mLastY
+        println("pel show magnifier x=$x y=$y startNewAnimation=$startNewAnimation")
+
+        if (startNewAnimation) {
+            if (mAnimator.isRunning()) {
+                mAnimator.cancel()
+                mAnimationStartX = mAnimationCurrentX
+                mAnimationStartY = mAnimationCurrentY
+            } else {
+                mAnimationStartX = mLastX
+                mAnimationStartY = mLastY
+            }
+            mAnimator.start()
+        } else {
+            if (!mAnimator.isRunning()) {
+                @Suppress("NewApi")
+                mMagnifier.show(x, y)
+            }
+        }
+        mLastX = x
+        mLastY = y
+        mMagnifierIsShowing = true
+    }
+
+    /**
+     * Updates the content of the magnifier.
+     */
+    fun update() {
+        @Suppress("NewApi")
+        mMagnifier.update()
+    }
+
+    /**
+     * Dismisses the magnifier, or does nothing if it is already dismissed.
+     */
+    fun dismiss() {
+        @Suppress("NewApi")
+        mMagnifier.dismiss()
+        mAnimator.cancel()
+        mMagnifierIsShowing = false
+    }
+
+    companion object {
+        private const val DURATION: Long = 100 /* miliseconds */
+    }
 }
