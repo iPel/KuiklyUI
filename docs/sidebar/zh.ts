@@ -195,9 +195,14 @@ export const zhSidebar = sidebar({
             prefix: "/Compose",
             collapsible: false,
             children: [
+                "status-management.md",
                 "layout.md",
-                "components.md",
-                "layout-components.md"
+                "list-and-scroll.md",
+                "core-components.md",
+                "modifier.md",
+                "animation-system.md",
+                "gesture-system.md",
+                "thread-and-coroutines.md"
             ]
         },
         {
@@ -205,23 +210,28 @@ export const zhSidebar = sidebar({
             prefix: "/Compose",
             collapsible: false,
             children: [
-                "interop-core.md"
+                "extend-kuikly-dsl-ui.md",
+                "extend-native-ui.md",
+                "extend-native-api.md"
             ]
         },
         {
-            text: "多端与迁移",
+            text: "工具链",
             prefix: "/Compose",
             collapsible: false,
             children: [
-                "multiplatform.md"
+                "resource-management.md",
+                "preview.md",
+                "ui-inspector.md",
+                "recomposition-performance.md"
             ]
         },
         {
-            text: "参考",
+            text: "FAQ",
             prefix: "/Compose",
             collapsible: false,
             children: [
-                "official-compose-links.md"
+                "faq.md"
             ]
         }
     ],

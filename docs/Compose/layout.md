@@ -1,95 +1,127 @@
 # 布局组件
 
-本页说明 Kuikly Compose 中布局组件的支持情况与使用注意事项。基础用法请优先查阅 Jetpack Compose 官方文档。
+本页说明 Kuikly Compose 中布局组件的支持情况与使用注意事项。  
+基础用法和官方保持一致，请**优先查阅 Jetpack Compose 官方文档**。
 
-> 官方文档（推荐起点）：[Layouts in Compose](https://developer.android.com/jetpack/compose/layouts)  
-> 详见：[Jetpack Compose 官方文档导航](./official-compose-links.md)
+> 官方文档（推荐阅读）：[Layouts in Compose](https://developer.android.com/develop/ui/compose/layouts/basics)
 
-### 支持的布局组件
-
+## 支持的布局组件
 Kuikly 当前重点支持以下布局组件，并与 Jetpack Compose 对齐：
 
-#### 基础布局容器
+### 基础布局容器
 
 - **Column** - 垂直排列子元素
 - **Row** - 水平排列子元素
 - **Box** - 层叠排列子元素
 - **BoxWithConstraints** - 带约束的层叠布局
 
-#### 流式布局
+### 自定义布局
+
+- **Layout** - 完全自定义测量与放置逻辑的布局容器，适合特殊排列需求  
+
+### 常见布局相关 Modifier
+
+- 尺寸控制  
+  - `size` / `width` / `height`  
+  - `fillMaxWidth` / `fillMaxHeight` / `fillMaxSize`  
+  - `requiredSize` / `requiredWidth` / `requiredHeight`（强制尺寸）  
+  - `defaultMinSize`、`heightIn` 、`widthIn`等（设置最小/范围尺寸）
+- 间距与位置  
+  - `padding`（内边距）  
+  - `offset` / `absoluteOffset`（位移）  
+- 权重与占比  
+  - `weight`（配合 `Row` / `Column` 控制主轴空间占比）  
+  - `aspectRatio`（固定宽高比）
+- 对齐与包装  
+  - `wrapContentSize` / `wrapContentWidth` / `wrapContentHeight`  
+  - `align` / `alignBy` / `alignByBaseline`（配合 `Box` / `Row` 使用）  
+  - `matchParentSize`（子项填满父容器）
+
+### 流式布局
 
 - **FlowRow** - 流式水平布局，自动换行
 - **FlowColumn** - 流式垂直布局，自动换列
 
-#### 辅助组件
+### 辅助组件
 
-- **Spacer** - 空白占位符
+- **Spacer** - 空白占位符，用于在布局中占据固定或可伸缩空间
+- **HorizontalDivider / VerticalDivider** - 水平 / 垂直分割线，常用于列表、区块之间的分隔
 
-在 Kuikly 中它们都位于：
-
-```kotlin
-import com.tencent.kuikly.compose.foundation.layout.*
-```
-
-### 布局行为对齐
-
-对大多数业务场景，这些布局的行为与 Jetpack Compose 保持一致：
-
-- 测量与放置规则一致
-- Modifier 链（`padding`、`size`、`fillMaxWidth` 等）语义一致
-- 布局参数（`Arrangement`、`Alignment` 等）行为一致
-
-### 跨端注意事项
-
-在跨端场景下需要额外注意的点：
-
-1. **不同平台的密度 / 字体渲染差异**
-   - 各平台默认字体不同，可能导致文本测量结果略有差异
-   - 建议使用 `dp` 单位而非 `sp` 进行布局，避免字体大小影响布局
-
-2. **极端约束下的表现差异**
-   - 某些平台上在极端约束（如极小宽度）下可能出现布局差异
-   - 建议在关键布局处进行多端真机验证
-
-3. **布局性能**
-   - 跨端渲染通过 Kuikly Core 原子组件实现，性能接近原生
-   - 复杂嵌套布局建议进行性能测试
-
-### 使用示例
+## 自定义布局示例
 
 ```kotlin
 @Composable
-fun ExampleLayout() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text("标题")
-        
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("左侧")
-            Text("右侧")
+fun TwoStack(
+    modifier: Modifier = Modifier,
+    top: @Composable () -> Unit,
+    bottom: @Composable () -> Unit
+) {
+    Layout(
+        modifier = modifier,
+        content = {
+            top()
+            bottom()
         }
-        
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text("居中内容")
+    ) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints) }
+        val width = placeables.maxOf { it.width }
+        val height = placeables.sumOf { it.height }
+        layout(width, height) {
+            var y = 0
+            placeables.forEach { placeable ->
+                placeable.placeRelative(0, y)
+                y += placeable.height
+            }
         }
     }
 }
 ```
 
-### 下一步
+## 内外边距示例
 
-- 了解 Material3 组件支持情况，请查看：[组件](./components.md)
-- 了解列表与滚动，请查看：[列表与滚动](./lists-and-scrolling.md)
+```kotlin
+@Composable
+fun MarginPaddingExample() {
+    Column {
+        // 1. 外边距：padding 在 background 之前，相当于父容器的 margin
+        Box(
+            modifier = Modifier
+                .padding(16.dp)
+                .background(Color.Yellow)
+                .size(100.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("外边距示例")
+        }
 
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // 2. 内边距：padding 在 background 之后，挤压内部内容
+        Box(
+            modifier = Modifier
+                .background(Color.Yellow)
+                .padding(16.dp)
+                .size(100.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(Modifier.background(Color.White)) {
+                Text("内边距示例")
+            }
+        }
+    }
+}
+```
+
+## 更多代码示例
+
+以下 Demo 展示了布局组件与布局相关能力的典型用法，可在开源仓库中查看完整代码：
+
+- [`BoxWithConstraintsDemo.kt`](https://github.com/Tencent-TDS/KuiklyUI/blob/main/demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose/BoxWithConstraintsDemo.kt)：`BoxWithConstraints` 响应式布局示例  
+- [`FlowRowDemo1.kt`](https://github.com/Tencent-TDS/KuiklyUI/blob/main/demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose/FlowRowDemo1.kt)：`FlowRow` 流式行布局示例  
+- [`FlowColumnDemo1.kt`](https://github.com/Tencent-TDS/KuiklyUI/blob/main/demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose/FlowColumnDemo1.kt)：`FlowColumn` 流式列布局示例  
+- [`MarginPaddingTestDemo.kt`](https://github.com/Tencent-TDS/KuiklyUI/blob/main/demo/src/commonMain/kotlin/com/tencent/kuikly/demo/pages/compose/MarginPaddingTestDemo.kt)：Compose 内外边距、边框写法示例
+
+## 注意事项
+
+- 自定义布局时，保持测量/放置逻辑在组合内，避免阻塞。
+- Modifier 顺序会直接影响布局效果（例如 padding / background / size 的先后关系），建议结合官方文档与实际渲染结果理解。
