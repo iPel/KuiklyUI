@@ -521,6 +521,19 @@ internal class TransformPage : BasePager() {
 
 设置组件的层级位置。组件的层级是按照书写顺序来叠放的，使用zIndex方法可更改组件的叠放顺序
 
+<div class="table-01">
+
+| 参数        | 描述                                               | 类型      |
+|:----------|:-------------------------------------------------|---------|
+| zIndex    | 层叠顺序值，值越大层级越高                                    | Int     |
+| useOutline | 默认为true，设为false可以解决Android同时设置zIndex和圆角出现非预期阴影问题 | Boolean |
+
+</div>
+
+:::tip 注意
+**useOutline参数仅在Android平台生效**，用于控制是否使用OutlineViewProvider。当遇到同时设置zIndex和圆角出现非预期阴影问题时，可以将此参数设为false来解决。
+:::
+
 :::tabs
 
 @tab:active 示例
@@ -855,6 +868,18 @@ right方法是指将本组件的定位到距离**右边**的多少距离，而�
 bottom方法是指将本组件的定位到距离**下边**的多少距离，而下边的定义取决于**positionType**方法设置的值。如果设置了**FlexPositionType.RELATIVE**,
 那么bottom的作用相当于设置了marginBottom; 如果设置了**FlexPositionType.ABSOLUTE**, 那么bottom的作用是将元素的上边定位到距离父元素下边的bottom值。
 
+### autoDarkEnable方法
+是否自动暗黑模式
+
+**true(默认值):**
+- iOS: 对应overrideUserInterfaceStyle设置为UIUserInterfaceStyleUnspecified
+- Android: 对应setForceDarkAllowed设置为ture
+
+**false:**
+- iOS: 对应overrideUserInterfaceStyle设置为UIUserInterfaceStyleLight
+- Android: 对应setForceDarkAllowed设置为false
+
+
 ---
 
 ## 基础事件
@@ -940,6 +965,7 @@ internal class DoubleClickEventPage : BasePager() {
 
 ``longPress``事件为长按事件，当``Kuikly``组件有设置长按事件，并且``Kuikly``组件被长按时，会触发``longPress``闭包回调。
 ``longPress``回调闭包中含有``LongPressParams``类型参数，以此来描述长按事件的信息
+``longPress``有三种state: start move end，当长按过程中有手势变化，则``longPress``会多次触发回调。如果不关心state，只关心长按是否进入事件，只需监听对应的start状态即可。
 
 <div class="table-01">
 
