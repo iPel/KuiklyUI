@@ -286,10 +286,6 @@ open class KRView(context: Context) : FrameLayout(context), IKuiklyRenderViewExp
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (textSelector?.onTouchEvent(event) == true) {
-            requestDisallowInterceptTouchEvent(true)
-            return true
-        }
         val result = super.onTouchEvent(event)
         currentActionState = event.action
         val touchResult =
@@ -354,7 +350,6 @@ open class KRView(context: Context) : FrameLayout(context), IKuiklyRenderViewExp
             canvas.restoreToCount(checkpoint)
         }
         drawCommonForegroundDecoration(canvas)
-        textSelector?.drawCursor(canvas)
     }
 
     private fun setWillDraw() {
