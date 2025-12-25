@@ -19,7 +19,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.util.Log
 import android.view.Choreographer
-import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -295,13 +294,6 @@ open class KRView(context: Context) : FrameLayout(context), IKuiklyRenderViewExp
                 tryFireTouchEvent(event)
             }
         return result || touchResult
-    }
-
-    override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK && textSelector?.performBackPressed() == true) {
-            return true
-        }
-        return super.onKeyUp(keyCode, event)
     }
 
     private fun tryFireSuperTouchCanceled(event: MotionEvent): Boolean {

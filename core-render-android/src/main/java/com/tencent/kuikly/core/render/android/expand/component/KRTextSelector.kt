@@ -15,6 +15,7 @@ import android.graphics.drawable.Drawable
 import android.os.Build
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -24,9 +25,11 @@ import android.view.animation.LinearInterpolator
 import android.widget.Magnifier
 import android.widget.PopupWindow
 import androidx.annotation.RequiresApi
+import com.tencent.kuikly.core.render.android.IKuiklyRenderContext
 import com.tencent.kuikly.core.render.android.adapter.KuiklyRenderLog
 import com.tencent.kuikly.core.render.android.css.ktx.toDpF
 import com.tencent.kuikly.core.render.android.css.ktx.toPxF
+import com.tencent.kuikly.core.render.android.css.ktx.toPxI
 import com.tencent.kuikly.core.render.android.export.KuiklyRenderCallback
 import org.json.JSONObject
 
@@ -41,10 +44,6 @@ private const val SELECTION_TYPE_WORD = 1
 private const val SELECTION_TYPE_PARAGRAPH = 2
 private const val SELECTION_TYPE_SENTENCE = 3
 
-private const val CURSOR_WIDTH = 10f
-private const val CURSOR_HEIGHT = 25f
-private const val CURSOR_RADIUS = 6f
-private const val CURSOR_HIT_EXTRA = 10f
 private const val DRAG_DESCENT = 2f
 
 private inline fun logInfo(msg: () -> String) {
@@ -107,6 +106,19 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
             forEachTextInner(view, 0, 0)
         }
 
+        private fun getAttrColor(context: Context, attr: Int, defValue: Int): Int {
+            val typedValue = TypedValue()
+            if (context.theme.resolveAttribute(attr, typedValue, true)) {
+                if (typedValue.type >= TypedValue.TYPE_FIRST_COLOR_INT &&
+                    typedValue.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+                    return typedValue.data
+                } else if (typedValue.resourceId != 0) {
+                    return context.getColor(typedValue.resourceId)
+                }
+            }
+            return defValue
+        }
+
     }
 
     private inline val kuiklyContext get() = view.kuiklyRenderContext
@@ -119,25 +131,39 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
 
     private val selectionPaint = Paint().also {
         it.style = Paint.Style.FILL
-        it.color = 0x6633B5E5 // default to translucent blue
+        // default to translucent blue
+        it.color = getAttrColor(view.context, android.R.attr.textColorHighlight, 0x6633B5E5)
     }
-    private val cursorPaint = Paint().also {
-        it.style = Paint.Style.FILL
-        it.color = 0xFF33B5E5.toInt() // default to blue
-    }
-    private var cursorColor = 0
 
+    private var cursorColor = 0
     private val _cursorStartView = lazy(LazyThreadSafetyMode.NONE) {
         val view = SelectionHandleView(this, view, true)
-        if (cursorColor != 0) view.setColor(cursorColor)
+        if (cursorColor != 0) {
+            view.setColor(cursorColor)
+        }
         view
     }
     private val cursorViewInitialized get() = _cursorStartView.isInitialized()
     private val cursorStartView by _cursorStartView
     private val cursorEndView by lazy(LazyThreadSafetyMode.NONE) {
         val view = SelectionHandleView(this, view, false)
-        if (cursorColor != 0) view.setColor(cursorColor)
+        if (cursorColor != 0) {
+            view.setColor(cursorColor)
+        }
         view
+    }
+    private val focusHelperView by lazy(LazyThreadSafetyMode.NONE) {
+        View(view.context).apply {
+            isFocusableInTouchMode = true
+            setOnKeyListener { _, keyCode, event ->
+                if (event.action == KeyEvent.ACTION_UP &&
+                    keyCode == KeyEvent.KEYCODE_BACK
+                ) {
+                    return@setOnKeyListener performBackPressed()
+                }
+                return@setOnKeyListener false
+            }
+        }
     }
 
     private var selectable = SELECTABLE_INHERIT
@@ -265,7 +291,6 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
         val background = option.optLong("background", -1L)
         val cursor = option.optLong("cursor", -1L)
         if (background != -1L && cursor != -1L) {
-            cursorPaint.color = cursor.toInt()
             selectionPaint.color = background.toInt()
             cursorColor = cursor.toInt()
             if (cursorViewInitialized) {
@@ -561,32 +586,38 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
     )
 
     private fun notifySelectStart() {
-        view.isFocusableInTouchMode = true
-        view.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
-            if (!hasFocus) {
-                this@KRTextSelector.clearSelection()
-            }
-        }
         selectStartCallback?.invoke(generateSelectEventParam())
         subscribeSelectionHandleUpdate()
-        view.invalidate()
-        view.requestFocus()
+        view.activity?.also {
+            it.addContentView(focusHelperView, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ))
+            focusHelperView.requestFocus()
+            focusHelperView.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
+                if (!hasFocus) {
+                    this@KRTextSelector.clearSelection()
+                }
+            }
+        }
     }
 
     private fun notifySelectChange() {
         selectChangeCallback?.invoke(generateSelectEventParam())
-        view.invalidate()
+        updateSelectionHandles()
     }
 
     private fun notifySelectEnd() {
         selectEndCallback?.invoke(generateSelectEventParam())
-        view.invalidate()
+        updateSelectionHandles()
     }
 
     private fun notifySelectCancel() {
-        view.onFocusChangeListener = null
-        view.isFocusable = false
-        view.clearFocus()
+        view.activity?.also {
+            focusHelperView.onFocusChangeListener = null
+            focusHelperView.clearFocus()
+            (focusHelperView.parent as? ViewGroup)?.removeView(focusHelperView)
+        }
         selectCancelCallback?.invoke(null)
         unsubscribeSelectionHandleUpdate()
         cursorStartView.dismiss()
@@ -626,51 +657,6 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
         if (textView.getSelectionPath(reusablePath)) {
             canvas.drawPath(reusablePath, selectionPaint)
         }
-    }
-
-    /** Fallback cursor drawing when popup handles unavailable */
-    private fun drawCursorFallback(canvas: Canvas) {
-        val cursorWidth = kuiklyContext.toPxF(CURSOR_WIDTH)
-        val cursorHeight = kuiklyContext.toPxF(CURSOR_HEIGHT)
-        val cursorRadius = kuiklyContext.toPxF(CURSOR_RADIUS)
-
-        reusablePath.apply {
-            rewind()
-            if (!draggingCursorStart()) {
-                moveTo(cursorStartX, cursorStartY)
-                rLineTo(-cursorWidth, cursorWidth)
-                rLineTo(0f, cursorHeight - cursorWidth - cursorRadius)
-                arcTo(
-                    cursorStartX - cursorWidth,
-                    cursorStartY + cursorHeight - cursorRadius * 2,
-                    cursorStartX - cursorWidth + cursorRadius * 2,
-                    cursorStartY + cursorHeight,
-                    180f,
-                    -90f,
-                    false
-                )
-                lineTo(cursorStartX, cursorStartY + cursorHeight)
-                close()
-            }
-
-            if (!draggingCursorEnd()) {
-                moveTo(cursorEndX, cursorEndY)
-                rLineTo(cursorWidth, cursorWidth)
-                rLineTo(0f, cursorHeight - cursorWidth - cursorRadius)
-                arcTo(
-                    cursorEndX + cursorWidth - cursorRadius * 2,
-                    cursorEndY + cursorHeight - cursorRadius * 2,
-                    cursorEndX + cursorWidth,
-                    cursorEndY + cursorHeight,
-                    0f,
-                    90f,
-                    false
-                )
-                lineTo(cursorEndX, cursorEndY + cursorHeight)
-                close()
-            }
-        }
-        canvas.drawPath(reusablePath, cursorPaint)
     }
 
     private fun updateSelectionHandles() {
@@ -734,7 +720,7 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
 
 /**
  * A value animator used to animate the magnifier.
- * copy from Android TextView source code.
+ * copied from aosp [android.widget.Editor.MagnifierMotionAnimator]
  */
 private class MagnifierMotionAnimator
 @RequiresApi(Build.VERSION_CODES.P) constructor(view: View) {
@@ -867,28 +853,16 @@ private class SelectionHandleView(
             }
         }
 
-        private fun getDrawable(context: Context, attr: Int): Drawable? {
-            return try {
-                val typedValue = TypedValue()
-                context.theme.resolveAttribute(attr, typedValue, true)
-                if (typedValue.resourceId != 0) {
-                    context.theme.getDrawable(typedValue.resourceId).mutate()
-                } else {
-                    null
-                }
-            } catch (_: Resources.NotFoundException) {
+        private fun getAttrDrawable(context: Context, attr: Int): Drawable? {
+            val typedValue = TypedValue()
+            val found = context.theme.resolveAttribute(attr, typedValue, true)
+            return if (found && typedValue.resourceId != 0) {
+                context.theme.getDrawable(typedValue.resourceId).mutate()
+            } else {
                 null
             }
         }
 
-    }
-
-    private class FallbackDrawableLeft() : ColorDrawable() {
-        // TODO
-    }
-
-    private class FallbackDrawableRight() : ColorDrawable() {
-        // TODO
     }
 
     private val container = PopupWindow(context, null, android.R.attr.textSelectHandleWindowStyle)
@@ -908,12 +882,15 @@ private class SelectionHandleView(
         val isRtl = context.resources.configuration.layoutDirection == LAYOUT_DIRECTION_RTL
         isLeft = isStart != isRtl
         drawable = if (isLeft) {
-            getDrawable(context, android.R.attr.textSelectHandleLeft) ?: FallbackDrawableLeft()
+            getAttrDrawable(context, android.R.attr.textSelectHandleLeft)
+                ?: FallbackDrawableLeft(view.kuiklyRenderContext)
         } else {
-            getDrawable(context, android.R.attr.textSelectHandleRight) ?: FallbackDrawableRight()
+            getAttrDrawable(context, android.R.attr.textSelectHandleRight)
+                ?: FallbackDrawableRight(view.kuiklyRenderContext)
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
@@ -945,13 +922,24 @@ private class SelectionHandleView(
     }
 
     fun setColor(color: Int) {
-        drawable.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+        if (drawable is ColorDrawable) {
+            drawable.color = color
+        } else {
+            drawable.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
+        }
         invalidate()
     }
 
-    /** Hotspot offset where handle connects to cursor */
+    /**
+     * Hotspot offset where handle connects to cursor,
+     * copied from aosp [android.widget.Editor.SelectionHandleView.getHotspotX]
+     */
     private fun hotSpotX(): Int {
-        return if (isLeft) drawable.intrinsicWidth * 3 / 4 else drawable.intrinsicWidth / 4
+        return if (isLeft) {
+            drawable.intrinsicWidth * 3 / 4
+        } else {
+            drawable.intrinsicWidth / 4
+        }
     }
 
     fun updatePosition(x: Float, y: Float) {
@@ -976,5 +964,71 @@ private class SelectionHandleView(
 
     fun dismiss() {
         container.dismiss()
+    }
+}
+
+private abstract class FallbackDrawableBase(
+    kuiklyContext: IKuiklyRenderContext?
+) : ColorDrawable() {
+
+    init {
+        color = 0xFF33B5E5.toInt() // default to blue
+    }
+
+    protected val cursorHeight = kuiklyContext.toPxI(25f)
+    protected val cursorWidth = kuiklyContext.toPxI(10f)
+    protected val cursorRadius = kuiklyContext.toPxF(6f)
+
+    abstract val path: Path
+
+    override fun getIntrinsicHeight() = cursorHeight
+
+    override fun getIntrinsicWidth() = cursorWidth * 4 // keep same as system drawable
+
+    override fun draw(canvas: Canvas) {
+        canvas.clipPath(path)
+        super.draw(canvas)
+    }
+}
+
+private class FallbackDrawableLeft(
+    kuiklyContext: IKuiklyRenderContext?
+) : FallbackDrawableBase(kuiklyContext) {
+    override val path: Path = Path().apply {
+        moveTo(cursorWidth * 3f, 0f)
+        lineTo(cursorWidth * 2f, cursorWidth.toFloat())
+        lineTo(cursorWidth * 2f, cursorHeight - cursorRadius)
+        arcTo(
+            cursorWidth * 2f,
+            cursorHeight - cursorRadius * 2,
+            cursorWidth * 2f + cursorRadius * 2,
+            cursorHeight.toFloat(),
+            180f,
+            -90f,
+            false
+        )
+        lineTo(cursorWidth * 3f, cursorHeight.toFloat())
+        close()
+    }
+}
+
+private class FallbackDrawableRight(
+    kuiklyContext: IKuiklyRenderContext?
+) : FallbackDrawableBase(kuiklyContext) {
+    override val path: Path = Path().apply {
+        moveTo(cursorWidth.toFloat(), 0f)
+        lineTo(cursorWidth * 2f, cursorWidth.toFloat())
+        lineTo(cursorWidth * 2f, cursorHeight - cursorRadius)
+        arcTo(
+            cursorWidth * 2f - cursorRadius * 2,
+            cursorHeight - cursorRadius * 2,
+            cursorWidth * 2f,
+            cursorHeight.toFloat(),
+            0f,
+            90f,
+            false
+        )
+        lineTo(cursorWidth.toFloat(), cursorHeight.toFloat())
+        close()
     }
 }
