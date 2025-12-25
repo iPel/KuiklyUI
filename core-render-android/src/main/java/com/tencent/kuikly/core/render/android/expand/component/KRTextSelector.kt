@@ -3,7 +3,6 @@ package com.tencent.kuikly.core.render.android.expand.component
 import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.res.Resources
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -56,7 +55,9 @@ private inline fun logInfo(msg: () -> String) {
  * Text selection controller for KRView and its KRRichTextView children.
  * Manages selection highlights, cursor handles, magnifier, and selection callbacks.
  */
-internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPreDrawListener {
+internal class KRTextSelector(
+    private val view: KRView
+) : ViewTreeObserver.OnPreDrawListener, View.OnLayoutChangeListener {
 
     companion object {
 
@@ -110,7 +111,8 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
             val typedValue = TypedValue()
             if (context.theme.resolveAttribute(attr, typedValue, true)) {
                 if (typedValue.type >= TypedValue.TYPE_FIRST_COLOR_INT &&
-                    typedValue.type <= TypedValue.TYPE_LAST_COLOR_INT) {
+                    typedValue.type <= TypedValue.TYPE_LAST_COLOR_INT
+                ) {
                     return typedValue.data
                 } else if (typedValue.resourceId != 0) {
                     return context.getColor(typedValue.resourceId)
@@ -268,11 +270,9 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
 
     fun destroy() {
         logInfo { "destroy" }
+        clearSelection()
         if (selectable != SELECTABLE_DISABLE) {
-            forEachText { _, _ ->
-                clearSelection()
-                parentTextSelector = null
-            }
+            forEachText { _, _ -> parentTextSelector = null }
         }
     }
 
@@ -492,7 +492,7 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
             Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
         )
 
-        var foundStartIndex = -1
+        var foundStart = false
         var foundEnd = false
         var selectionLeft = Float.MAX_VALUE
         var selectionTop = Float.MAX_VALUE
@@ -511,7 +511,7 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
                 startY - offsetY,
                 endX - offsetX,
                 endY - offsetY,
-                checkStartEdge = foundStartIndex != -1, // don't check for first select item
+                checkStartEdge = i != 0, // don't check for first select item
                 checkEndEdge = i != size - 1 // don't check for last select item
             )
             if (hit) {
@@ -521,34 +521,24 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
                 selectionRight = maxOf(selectionRight, reusableRect.right + offsetX)
                 selectionBottom = maxOf(selectionBottom, reusableRect.bottom + offsetY)
             }
-            if (foundStartIndex == -1 && hit) {
+            if (!foundStart && hit) {
                 logInfo { "start hit i=$i view hash=${textView.hashCode()}" }
-                foundStartIndex = i
+                foundStart = true
                 textView.getSelectionStartPosition().also { (px, py) ->
                     cursorStartX = px + offsetX
                     cursorStartY = py + offsetY
                 }
-            } else if (foundStartIndex != -1 && !hit) {
+            } else if (foundStart && !hit) {
                 logInfo { "end hit i=$i view hash=${textView.hashCode()}" }
                 foundEnd = true
                 val (endTextView, endOffsetX, endOffsetY) = reusableTextViewList[i - 1]
-                // the previous item is the last selected one,
-                // call updateSelectionByCoordinate again with checkEndEdge = false
-                endTextView.setSelectionByCoordinates(
-                    startX - endOffsetX,
-                    startY - endOffsetY,
-                    endX - endOffsetX,
-                    endY - endOffsetY,
-                    foundStartIndex != i - 1,
-                    false
-                )
                 endTextView.getSelectionEndPosition().also { (px, py) ->
                     cursorEndX = px + endOffsetX
                     cursorEndY = py + endOffsetY
                 }
             }
         }
-        if (foundStartIndex == -1) {
+        if (!foundStart) {
             // restore old position
             restoreSelection(dragFixedX, dragFixedY)
             return
@@ -589,10 +579,12 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
         selectStartCallback?.invoke(generateSelectEventParam())
         subscribeSelectionHandleUpdate()
         view.activity?.also {
-            it.addContentView(focusHelperView, ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-            ))
+            it.addContentView(
+                focusHelperView, ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT
+                )
+            )
             focusHelperView.requestFocus()
             focusHelperView.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
                 if (!hasFocus) {
@@ -600,6 +592,7 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
                 }
             }
         }
+        updateSelectionHandles()
     }
 
     private fun notifySelectChange() {
@@ -641,7 +634,7 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
     }
 
     fun clearSelection() {
-        logInfo { "clearSelection" }
+        logInfo { "clearSelection active=$active" }
         if (active) {
             active = false
             forEachText { _, _ -> clearSelection() }
@@ -682,9 +675,11 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
 
     private fun subscribeSelectionHandleUpdate() {
         view.viewTreeObserver.addOnPreDrawListener(this)
+        view.addOnLayoutChangeListener(this)
     }
 
     private fun unsubscribeSelectionHandleUpdate() {
+        view.removeOnLayoutChangeListener(this)
         view.viewTreeObserver.removeOnPreDrawListener(this)
     }
 
@@ -693,6 +688,25 @@ internal class KRTextSelector(private val view: KRView) : ViewTreeObserver.OnPre
             updateSelectionHandles()
         }
         return true
+    }
+
+    override fun onLayoutChange(
+        v: View,
+        left: Int,
+        top: Int,
+        right: Int,
+        bottom: Int,
+        oldLeft: Int,
+        oldTop: Int,
+        oldRight: Int,
+        oldBottom: Int
+    ) {
+        if ((bottom - top != oldBottom - oldTop) || (right - left != oldRight - oldLeft)) {
+            logInfo { "layout changed active=$active" }
+            if (active) {
+                view.post { clearSelection() }
+            }
+        }
     }
 
     /** During drag, cursors may swap roles based on position */
@@ -868,8 +882,8 @@ private class SelectionHandleView(
     private val container = PopupWindow(context, null, android.R.attr.textSelectHandleWindowStyle)
     private val isLeft: Boolean
     private val drawable: Drawable
-    private var positionX: Int = 0
-    private var positionY: Int = 0
+    private var positionX: Float = Float.NaN
+    private var positionY: Float = Float.NaN
     private var touchDownX: Float = Float.NaN
     private var touchDownY: Float = Float.NaN
 
@@ -944,11 +958,11 @@ private class SelectionHandleView(
 
     fun updatePosition(x: Float, y: Float) {
         visibility = VISIBLE
-        if (positionX == x.toInt() && positionY == y.toInt()) {
+        if (positionX == x && positionY == y) {
             return
         }
-        positionX = x.toInt()
-        positionY = y.toInt()
+        positionX = x
+        positionY = y
         val finalX = x.toInt() - hotSpotX()
         val finalY = y.toInt()
         if (container.isShowing) {
@@ -963,6 +977,8 @@ private class SelectionHandleView(
     }
 
     fun dismiss() {
+        positionX = Float.NaN
+        positionY = Float.NaN
         container.dismiss()
     }
 }

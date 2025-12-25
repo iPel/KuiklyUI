@@ -414,6 +414,11 @@ open class KRView(context: Context) : FrameLayout(context), IKuiklyRenderViewExp
         }
     }
 
+    override fun onDetachedFromWindow() {
+        resetTextSelector()
+        super.onDetachedFromWindow()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         setScreenFrameCallback(null)
