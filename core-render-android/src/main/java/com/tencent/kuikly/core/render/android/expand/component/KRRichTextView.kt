@@ -208,6 +208,13 @@ class KRRichTextView(context: Context) : KRView(context) {
                 || params.width == 0
 
     /**
+     * Returns the length, in characters
+     */
+    fun length(): Int {
+        return textDrawer?.textLayout?.text?.length ?: 0
+    }
+
+    /**
      * set selection by one point coordinate
      */
     fun setSelectionByCoordinate(
@@ -275,11 +282,10 @@ class KRRichTextView(context: Context) : KRView(context) {
                     pos2 = getOffsetForPosition(layout, x2, y2, checkStartEdge, checkEndEdge)
                     if (pos1 == pos2) {
                         if (force) {
-                            if (pos1 >= size) {
-                                pos1 = size - 1
-                                pos2 = size
+                            if (shouldExpandSelectionBackward(layout, x1, y1, x2, y2, pos2)) {
+                                pos1 -= 1
                             } else {
-                                pos2 = pos1 + 1
+                                pos2 += 1
                             }
                         } else {
                             pos1 = INVALID_OFFSET
@@ -296,6 +302,20 @@ class KRRichTextView(context: Context) : KRView(context) {
             return it.hasSelection
         }
         return false
+    }
+
+    private fun shouldExpandSelectionBackward(
+        layout: Layout,
+        x1: Float,
+        y1: Float,
+        x2: Float,
+        y2: Float,
+        position: Int
+    ): Boolean {
+        val line = layout.getLineForOffset(position)
+        return (line > 0 && y2 < layout.getLineTop(line)) ||
+                (position == layout.text.length) ||
+                (x2 < x1 && position != layout.getLineStart(line))
     }
 
     fun clearSelection() {
@@ -330,23 +350,33 @@ class KRRichTextView(context: Context) : KRView(context) {
             (x < 0 && layout.getParagraphDirection(line) == Layout.DIR_RIGHT_TO_LEFT)) {
             return layout.getLineEnd(line)
         }
-        val offset: Int = layout.getOffsetForHorizontal(line, x)
-        return offset
+        return layout.getOffsetForHorizontal(line, x)
     }
 
     fun getSelectionStartPosition(): Pair<Float, Float> {
         val it = textDrawer!!
-        return getPositionForOffset(it.textLayout!!, it.selectionStart)
+        return getPositionForOffset(it.textLayout!!, it.selectionStart, true)
     }
 
     fun getSelectionEndPosition(): Pair<Float, Float> {
         val it = textDrawer!!
-        return getPositionForOffset(it.textLayout!!, it.selectionEnd)
+        return getPositionForOffset(it.textLayout!!, it.selectionEnd, false)
     }
 
-    private fun getPositionForOffset(layout: Layout, offset: Int): Pair<Float, Float> {
-        val line: Int = layout.getLineForOffset(offset)
-        val x: Float = layout.getPrimaryHorizontal(offset)
+    private fun getPositionForOffset(layout: Layout, offset: Int, isStart: Boolean): Pair<Float, Float> {
+        var line: Int = layout.getLineForOffset(offset)
+        val x: Float
+        if (!isStart && line > 0 && offset == layout.getLineStart(line)) {
+            // end-offset is at the beginning of line, use end of previous line
+            line -= 1
+            x = if (layout.getParagraphDirection(line) == Layout.DIR_LEFT_TO_RIGHT) {
+                layout.width + 0.1f // add 0.1f to stay out of the previous character's bounds
+            } else {
+                -0.1f
+            }
+        } else {
+            x = layout.getPrimaryHorizontal(offset)
+        }
         val y: Float = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             layout.getLineBottom(line, false)
         } else {

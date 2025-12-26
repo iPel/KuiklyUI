@@ -12,6 +12,8 @@ import android.graphics.RectF
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -167,6 +169,9 @@ internal class KRTextSelector(
             }
         }
     }
+    private val handler by lazy(LazyThreadSafetyMode.NONE) {
+        Handler(Looper.getMainLooper())
+    }
 
     private var selectable = SELECTABLE_INHERIT
     private inline val enabled get() = selectable == SELECTABLE_ENABLE
@@ -256,7 +261,9 @@ internal class KRTextSelector(
         dragMovableX = Float.NaN
         dragMovableY = Float.NaN
         magnifierAnimator?.dismiss()
-        notifySelectEnd()
+        if (active) {
+            notifySelectEnd()
+        }
     }
 
     /** @return true if back press was consumed */
@@ -355,10 +362,10 @@ internal class KRTextSelector(
     private fun createSelectionInternal(x: Float, y: Float, type: SelectionType): Boolean {
         reusableTextViewList.clear()
         forEachText { offsetX, offsetY ->
-            // check hit
+            // check hit, visible and has content
             if (x < offsetX + this.width && x >= offsetX &&
                 y < offsetY + this.height && y >= offsetY &&
-                this.visibility == View.VISIBLE
+                this.visibility == View.VISIBLE && this.length() > 0
             ) {
                 reusableTextViewList.add(Triple(this, offsetX, offsetY))
             }
@@ -477,9 +484,9 @@ internal class KRTextSelector(
         val minY = minOf(startY, endY)
         val maxY = maxOf(startY, endY)
         forEachText { offsetX, offsetY ->
-            // check hit
+            // check hit, visible and has content
             if (minY < offsetY + this.height && maxY >= offsetY &&
-                this.visibility == View.VISIBLE
+                this.visibility == View.VISIBLE && this.length() > 0
             ) {
                 reusableTextViewList.add(Triple(this, offsetX, offsetY))
             } else {
@@ -512,7 +519,8 @@ internal class KRTextSelector(
                 endX - offsetX,
                 endY - offsetY,
                 checkStartEdge = i != 0, // don't check for first select item
-                checkEndEdge = i != size - 1 // don't check for last select item
+                checkEndEdge = i != size - 1, // don't check for last select item
+                force = i == size - 1 && !foundStart // force select last if nothing found yet
             )
             if (hit) {
                 textView.getSelectionRect(reusableRect)
@@ -539,8 +547,9 @@ internal class KRTextSelector(
             }
         }
         if (!foundStart) {
-            // restore old position
-            restoreSelection(dragFixedX, dragFixedY)
+            // this should never happen, but just in case, clear selection
+            logInfo { "updateSelection empty" }
+            handler.post { clearSelection() }
             return
         }
         if (!foundEnd) {
@@ -555,16 +564,6 @@ internal class KRTextSelector(
         selectionRect.top = selectionTop
         selectionRect.right = selectionRight
         selectionRect.bottom = selectionBottom
-    }
-
-    /** Fallback when drag results in no valid selection */
-    private fun restoreSelection(x: Float, y: Float) {
-        logInfo { "restore selection to ($x,$y)" }
-        val result = createSelectionInternal(x, y, SelectionType.CHARACTER)
-        if (!result) {
-            // this should never happen
-            logInfo { "restore selection failed" }
-        }
     }
 
     /** Generates callback params with bounds in dp */
@@ -704,7 +703,7 @@ internal class KRTextSelector(
         if ((bottom - top != oldBottom - oldTop) || (right - left != oldRight - oldLeft)) {
             logInfo { "layout changed active=$active" }
             if (active) {
-                view.post { clearSelection() }
+                handler.post { clearSelection() }
             }
         }
     }
@@ -889,6 +888,7 @@ private class SelectionHandleView(
 
     init {
         container.isClippingEnabled = false
+        container.animationStyle = 0 // no animation
         container.compatSetWindowLayoutType(WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL)
         container.width = ViewGroup.LayoutParams.WRAP_CONTENT
         container.height = ViewGroup.LayoutParams.WRAP_CONTENT
@@ -897,10 +897,10 @@ private class SelectionHandleView(
         isLeft = isStart != isRtl
         drawable = if (isLeft) {
             getAttrDrawable(context, android.R.attr.textSelectHandleLeft)
-                ?: FallbackDrawableLeft(view.kuiklyRenderContext)
+                ?: FallbackDrawableLeft(view)
         } else {
             getAttrDrawable(context, android.R.attr.textSelectHandleRight)
-                ?: FallbackDrawableRight(view.kuiklyRenderContext)
+                ?: FallbackDrawableRight(view)
         }
     }
 
@@ -983,9 +983,7 @@ private class SelectionHandleView(
     }
 }
 
-private abstract class FallbackDrawableBase(
-    kuiklyContext: IKuiklyRenderContext?
-) : ColorDrawable() {
+private abstract class PathDrawable(kuiklyContext: IKuiklyRenderContext?) : ColorDrawable() {
 
     init {
         color = 0xFF33B5E5.toInt() // default to blue
@@ -1007,9 +1005,7 @@ private abstract class FallbackDrawableBase(
     }
 }
 
-private class FallbackDrawableLeft(
-    kuiklyContext: IKuiklyRenderContext?
-) : FallbackDrawableBase(kuiklyContext) {
+private class FallbackDrawableLeft(view: KRView) : PathDrawable(view.kuiklyRenderContext) {
     override val path: Path = Path().apply {
         moveTo(cursorWidth * 3f, 0f)
         lineTo(cursorWidth * 2f, cursorWidth.toFloat())
@@ -1028,9 +1024,7 @@ private class FallbackDrawableLeft(
     }
 }
 
-private class FallbackDrawableRight(
-    kuiklyContext: IKuiklyRenderContext?
-) : FallbackDrawableBase(kuiklyContext) {
+private class FallbackDrawableRight(view: KRView) : PathDrawable(view.kuiklyRenderContext) {
     override val path: Path = Path().apply {
         moveTo(cursorWidth.toFloat(), 0f)
         lineTo(cursorWidth * 2f, cursorWidth.toFloat())
