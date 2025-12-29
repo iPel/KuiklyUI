@@ -250,9 +250,9 @@ class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.C
         textDrawer?.clearSelection()
     }
 
-    fun getSelectionStartPosition(): Pair<Float, Float> = textDrawer!!.getSelectionStartPosition()
+    fun getStartSelectionEdge(): SelectionEdge = textDrawer!!.getStartSelectionEdge()
 
-    fun getSelectionEndPosition(): Pair<Float, Float> = textDrawer!!.getSelectionEndPosition()
+    fun getEndSelectionEdge(): SelectionEdge = textDrawer!!.getEndSelectionEdge()
 
     fun getSelectionRect(dest: RectF): Boolean = textDrawer?.getSelectionRect(dest) ?: false
 
@@ -852,3 +852,9 @@ enum class SelectionType {
     PARAGRAPH,
     SENTENCE
 }
+
+data class SelectionEdge(
+    val x: Float,
+    val top: Float,
+    val bottom: Float
+)

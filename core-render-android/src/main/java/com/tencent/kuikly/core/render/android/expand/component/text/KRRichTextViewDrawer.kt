@@ -22,6 +22,8 @@ import android.os.Build
 import android.text.Layout
 import android.text.Spanned
 import android.text.style.ReplacementSpan
+import com.tencent.kuikly.core.render.android.expand.component.KRTextProps
+import com.tencent.kuikly.core.render.android.expand.component.SelectionEdge
 import com.tencent.kuikly.core.render.android.expand.component.SelectionType
 import java.lang.ref.WeakReference
 import java.text.BreakIterator
@@ -152,9 +154,9 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
         }
     }
 
-    internal fun getSelectionStartPosition() = textLayout.getPositionForOffset(selectionStart)
+    internal fun getStartSelectionEdge() = textLayout.getPositionForOffset(selectionStart)
 
-    internal fun getSelectionEndPosition() = textLayout.getPositionForOffset(selectionEnd, true)
+    internal fun getEndSelectionEdge() = textLayout.getPositionForOffset(selectionEnd, true)
 
     internal fun getSelectionRect(dest: RectF): Boolean {
         return if (hasSelection) {
@@ -282,7 +284,7 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
         private fun Layout.getPositionForOffset(
             offset: Int,
             isEnd: Boolean = false
-        ): Pair<Float, Float> {
+        ): SelectionEdge {
             var line: Int = getLineForOffset(offset)
             val x: Float
             if (isEnd && line > 0 && offset == getLineStart(line) && text[offset - 1] != '\n') {
@@ -296,12 +298,13 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
             } else {
                 x = getPrimaryHorizontal(offset)
             }
-            val y: Float = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val bottom: Float = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 getLineBottom(line, false)
             } else {
                 getLineBottom(line)
             }).toFloat()
-            return Pair(x, y)
+            val top = getLineTop(line).toFloat()
+            return SelectionEdge(x, top, bottom)
         }
 
         private fun Layout.shouldExpandSelectionBackward(

@@ -45,8 +45,6 @@ private const val SELECTION_TYPE_WORD = 1
 private const val SELECTION_TYPE_PARAGRAPH = 2
 private const val SELECTION_TYPE_SENTENCE = 3
 
-private const val DRAG_DESCENT = 2f
-
 private inline fun logInfo(msg: () -> String) {
     if (DEBUG_LOG) {
         KuiklyRenderLog.i("KRTextSelector", msg())
@@ -176,9 +174,13 @@ internal class KRTextSelector(
     private var selectable = SELECTABLE_INHERIT
     private inline val enabled get() = selectable == SELECTABLE_ENABLE
     private var cursorStartX: Float = Float.NaN
-    private var cursorStartY: Float = Float.NaN
+    private var cursorStartTop: Float = Float.NaN
+    private var cursorStartBottom: Float = Float.NaN
+    private inline val cursorStartY get() = (cursorStartTop + cursorStartBottom) / 2f
     private var cursorEndX: Float = Float.NaN
-    private var cursorEndY: Float = Float.NaN
+    private var cursorEndTop: Float = Float.NaN
+    private var cursorEndBottom: Float = Float.NaN
+    private inline val cursorEndY get() = (cursorEndTop + cursorEndBottom) / 2f
 
     private var selectStartCallback: KuiklyRenderCallback? = null
     private var selectChangeCallback: KuiklyRenderCallback? = null
@@ -197,25 +199,29 @@ internal class KRTextSelector(
             if (value) {
                 subscribeSelectionHandleUpdate()
                 view.activity?.also {
-                    it.addContentView(
-                        focusHelperView, ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
+                    handler.post { // post to avoid add during view iteration
+                        it.addContentView(
+                            focusHelperView, ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
                         )
-                    )
-                    focusHelperView.requestFocus()
-                    focusHelperView.onFocusChangeListener =
-                        View.OnFocusChangeListener { _, hasFocus ->
-                            if (!hasFocus) {
-                                this@KRTextSelector.clearSelection()
+                        focusHelperView.requestFocus()
+                        focusHelperView.onFocusChangeListener =
+                            View.OnFocusChangeListener { _, hasFocus ->
+                                if (!hasFocus) {
+                                    this@KRTextSelector.clearSelection()
+                                }
                             }
-                        }
+                    }
                 }
             } else {
                 view.activity?.also {
-                    focusHelperView.onFocusChangeListener = null
-                    focusHelperView.clearFocus()
-                    (focusHelperView.parent as? ViewGroup)?.removeView(focusHelperView)
+                    handler.post { // post to avoid remove during view iteration
+                        focusHelperView.onFocusChangeListener = null
+                        focusHelperView.clearFocus()
+                        (focusHelperView.parent as? ViewGroup)?.removeView(focusHelperView)
+                    }
                 }
                 unsubscribeSelectionHandleUpdate()
             }
@@ -230,14 +236,16 @@ internal class KRTextSelector(
     private var dragMovableY: Float = Float.NaN
 
     // magnifier support
+    private var minLineHeightForMagnifier: Float = 0f
+    private var maxLineHeightForMagnifier: Float = Float.MAX_VALUE
     private val magnifierAnimator by lazy(LazyThreadSafetyMode.NONE) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) MagnifierMotionAnimator(view) else null
-    }
-
-    private val updateMagnifierRunnable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        Runnable { magnifierAnimator!!.update() }
-    } else {
-        null
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            minLineHeightForMagnifier = kuiklyContext.toPxF(25f)
+            maxLineHeightForMagnifier = kuiklyContext.toPxF(36f)
+            MagnifierMotionAnimator(view)
+        } else {
+            null
+        }
     }
 
     init {
@@ -247,19 +255,17 @@ internal class KRTextSelector(
     fun handleTouchDown(isStart: Boolean) {
         assert(active)
         dragging = true
-        // used to adjust y into the text line
-        val dragDescent = kuiklyContext.toPxF(DRAG_DESCENT)
         if (isStart) {
             dragFixedX = cursorEndX
-            dragFixedY = cursorEndY - dragDescent
+            dragFixedY = cursorEndY
             dragMovableX = cursorStartX
-            dragMovableY = cursorStartY - dragDescent
+            dragMovableY = cursorStartY
             cursorStartView.hide()
         } else {
             dragFixedX = cursorStartX
-            dragFixedY = cursorStartY - dragDescent
+            dragFixedY = cursorStartY
             dragMovableX = cursorEndX
-            dragMovableY = cursorEndY - dragDescent
+            dragMovableY = cursorEndY
             cursorEndView.hide()
         }
     }
@@ -281,7 +287,24 @@ internal class KRTextSelector(
         ) {
             notifySelectChange()
         }
-        magnifierAnimator?.show(x2, if (draggingCursorStart()) cursorStartY else cursorEndY)
+        magnifierAnimator?.apply {
+            val lineHeight: Float
+            val centerY: Float
+            if (draggingCursorStart()) {
+                lineHeight = cursorStartBottom - cursorStartTop
+                centerY = cursorStartY
+            } else {
+                lineHeight = cursorEndBottom - cursorEndTop
+                centerY = cursorEndY
+            }
+
+            if (lineHeight > maxLineHeightForMagnifier) {
+                dismiss()
+            } else {
+                updateZoom((minLineHeightForMagnifier / lineHeight).coerceAtLeast(1f))
+                show(x2, centerY)
+            }
+        }
     }
 
     fun handleTouchUp() {
@@ -410,13 +433,15 @@ internal class KRTextSelector(
         for (i in reusableTextViewList.size - 1 downTo 0) {
             val (textView, offsetX, offsetY) = reusableTextViewList[i]
             if (textView.setSelectionByCoordinate(x - offsetX, y - offsetY, type)) {
-                textView.getSelectionStartPosition().also { (px, py) ->
+                textView.getStartSelectionEdge().also { (px, pt, pb) ->
                     cursorStartX = px + offsetX
-                    cursorStartY = py + offsetY
+                    cursorStartTop = pt + offsetY
+                    cursorStartBottom = pb + offsetY
                 }
-                textView.getSelectionEndPosition().also { (px, py) ->
+                textView.getEndSelectionEdge().also { (px, pt, pb) ->
                     cursorEndX = px + offsetX
-                    cursorEndY = py + offsetY
+                    cursorEndTop = pt + offsetY
+                    cursorEndBottom = pb + offsetY
                 }
                 logInfo { "position hit i=$i view hash=${textView.hashCode()}" }
                 textView.getSelectionRect(reusableRect)
@@ -431,13 +456,15 @@ internal class KRTextSelector(
         findClosestTextView(x, y)?.also { (textView, offsetX, offsetY) ->
             logInfo { "closest view hash=${textView.hashCode()}" }
             if (textView.setSelectionByCoordinate(x - offsetX, y - offsetY, type, force = true)) {
-                textView.getSelectionStartPosition().also { (px, py) ->
+                textView.getStartSelectionEdge().also { (px, pt, pb) ->
                     cursorStartX = px + offsetX
-                    cursorStartY = py + offsetY
+                    cursorStartTop = pt + offsetY
+                    cursorStartBottom = pb + offsetY
                 }
-                textView.getSelectionEndPosition().also { (px, py) ->
+                textView.getEndSelectionEdge().also { (px, pt, pb) ->
                     cursorEndX = px + offsetX
-                    cursorEndY = py + offsetY
+                    cursorEndTop = pt + offsetY
+                    cursorEndBottom = pb + offsetY
                 }
                 textView.getSelectionRect(reusableRect)
                 selectionRect.left = reusableRect.left + offsetX
@@ -449,9 +476,11 @@ internal class KRTextSelector(
         }
         logInfo { "create selection failed" }
         cursorStartX = Float.NaN
-        cursorStartY = Float.NaN
+        cursorStartTop = Float.NaN
+        cursorStartBottom = Float.NaN
         cursorEndX = Float.NaN
-        cursorEndY = Float.NaN
+        cursorEndTop = Float.NaN
+        cursorEndBottom = Float.NaN
         return false
     }
 
@@ -523,13 +552,15 @@ internal class KRTextSelector(
             }
         }
         if (firstView != null && lastView != null) {
-            firstView!!.getSelectionStartPosition().also { (px, py) ->
+            firstView!!.getStartSelectionEdge().also { (px, pt, pb) ->
                 cursorStartX = px + firstX
-                cursorStartY = py + firstY
+                cursorStartTop = pt + firstY
+                cursorStartBottom = pb + firstY
             }
-            lastView!!.getSelectionEndPosition().also { (px, py) ->
+            lastView!!.getEndSelectionEdge().also { (px, pt, pb) ->
                 cursorEndX = px + lastX
-                cursorEndY = py + lastY
+                cursorEndTop = pt + lastY
+                cursorEndBottom = pb + lastY
             }
             val oldLeft = selectionRect.left
             val oldTop = selectionRect.top
@@ -602,32 +633,35 @@ internal class KRTextSelector(
             if (!foundStart && hit) {
                 logInfo { "start hit i=$i view hash=${textView.hashCode()}" }
                 foundStart = true
-                textView.getSelectionStartPosition().also { (px, py) ->
+                textView.getStartSelectionEdge().also { (px, pt, pb) ->
                     cursorStartX = px + offsetX
-                    cursorStartY = py + offsetY
+                    cursorStartTop = pt + offsetY
+                    cursorStartBottom = pb + offsetY
                 }
             } else if (foundStart && !hit) {
                 logInfo { "end hit i=$i view hash=${textView.hashCode()}" }
                 foundEnd = true
                 val (endTextView, endOffsetX, endOffsetY) = reusableTextViewList[i - 1]
-                endTextView.getSelectionEndPosition().also { (px, py) ->
+                endTextView.getEndSelectionEdge().also { (px, pt, pb) ->
                     cursorEndX = px + endOffsetX
-                    cursorEndY = py + endOffsetY
+                    cursorEndTop = pt + endOffsetY
+                    cursorEndBottom = pb + endOffsetY
                 }
             }
         }
         if (!foundStart) {
             // this should never happen, but just in case, clear selection
             logInfo { "updateSelection empty" }
-            handler.post { clearSelection() }
+            handler.post { clearSelection() } // post to avoid cancel during touchMove
             return
         }
         if (!foundEnd) {
             // update end position to last
             val (textView, offsetX, offsetY) = reusableTextViewList.last()
-            textView.getSelectionEndPosition().also { (px, py) ->
+            textView.getEndSelectionEdge().also { (px, pt, pb) ->
                 cursorEndX = px + offsetX
-                cursorEndY = py + offsetY
+                cursorEndTop = pt + offsetY
+                cursorEndBottom = pb + offsetY
             }
         }
         selectionRect.left = selectionLeft
@@ -707,17 +741,17 @@ internal class KRTextSelector(
         if (draggingCursorStart()) {
             cursorStartView.hide()
         } else {
-            cursorStartView.updatePosition(
+            cursorStartView.show(
                 reusableIntArray[0] + cursorStartX,
-                reusableIntArray[1] + cursorStartY
+                reusableIntArray[1] + cursorStartBottom
             )
         }
         if (draggingCursorEnd()) {
             cursorEndView.hide()
         } else {
-            cursorEndView.updatePosition(
+            cursorEndView.show(
                 reusableIntArray[0] + cursorEndX,
-                reusableIntArray[1] + cursorEndY
+                reusableIntArray[1] + cursorEndBottom
             )
         }
     }
@@ -753,7 +787,7 @@ internal class KRTextSelector(
         if ((bottom - top != oldBottom - oldTop) || (right - left != oldRight - oldLeft)) {
             logInfo { "layout changed active=$active" }
             if (active) {
-                handler.post { clearSelection() }
+                clearSelection()
             }
         }
     }
@@ -761,20 +795,18 @@ internal class KRTextSelector(
     /** During drag, cursors may swap roles based on position */
     private fun draggingCursorStart(): Boolean {
         if (dragging) {
-            val dragDescent = kuiklyContext.toPxF(DRAG_DESCENT)
             // end cursor at fixed position or even above (means trimmed for line end)
-            return dragFixedY + dragDescent > cursorEndY ||
-                    (dragFixedY + dragDescent == cursorEndY && dragFixedX == cursorEndX)
+            return dragFixedY > cursorEndY ||
+                    (dragFixedY == cursorEndY && dragFixedX == cursorEndX)
         }
         return false
     }
 
     private fun draggingCursorEnd(): Boolean {
         if (dragging) {
-            val dragDescent = kuiklyContext.toPxF(DRAG_DESCENT)
             // start cursor at fixed position or even below (means trimmed for line start)
-            return dragFixedY + dragDescent < cursorStartY ||
-                    (dragFixedY + dragDescent == cursorStartY && dragFixedX == cursorStartX)
+            return dragFixedY < cursorStartY ||
+                    (dragFixedY == cursorStartY && dragFixedX == cursorStartX)
         }
         return false
     }
@@ -826,6 +858,14 @@ private class MagnifierMotionAnimator
         })
     }
 
+    fun updateZoom(zoom: Float) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            if (zoom != mMagnifier.zoom) {
+                mMagnifier.zoom = zoom
+            }
+        }
+    }
+
     /**
      * Shows the magnifier at a new position.
      * If the y coordinate is different from the previous y coordinate
@@ -834,7 +874,6 @@ private class MagnifierMotionAnimator
      */
     fun show(x: Float, y: Float) {
         val startNewAnimation = mMagnifierIsShowing && y != mLastY
-        // println("pel show magnifier x=$x y=$y startNewAnimation=$startNewAnimation")
 
         if (startNewAnimation) {
             if (mAnimator.isRunning()) {
@@ -855,14 +894,6 @@ private class MagnifierMotionAnimator
         mLastX = x
         mLastY = y
         mMagnifierIsShowing = true
-    }
-
-    /**
-     * Updates the content of the magnifier.
-     */
-    fun update() {
-        @Suppress("NewApi")
-        mMagnifier.update()
     }
 
     /**
@@ -1006,7 +1037,7 @@ private class SelectionHandleView(
         }
     }
 
-    fun updatePosition(x: Float, y: Float) {
+    fun show(x: Float, y: Float) {
         visibility = VISIBLE
         if (positionX == x && positionY == y) {
             return
