@@ -57,7 +57,7 @@ import kotlin.math.roundToInt
 /**
  * KTV 富文本组件，支持简单文本和富文本两种模式
  */
-class KRRichTextView(context: Context) : KRView(context) {
+class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.Callback {
 
     private var richTextShadow: KRRichTextShadow? = null
     private var textDrawer: KRRichTextViewDrawer? = null
@@ -174,7 +174,12 @@ class KRRichTextView(context: Context) : KRView(context) {
 
     private fun initTextLayout(richTextShadow: KRRichTextShadow?) {
         val textShadow = richTextShadow ?: return
-        textDrawer = tryReMeasureTextLayout(textShadow, layoutParams)
+        val newTextDrawer = tryReMeasureTextLayout(textShadow, layoutParams)
+        if (newTextDrawer != textDrawer) {
+            textDrawer?.setCallback(null)
+            newTextDrawer?.setCallback(this)
+            textDrawer = newTextDrawer
+        }
     }
 
     private fun tryReMeasureTextLayout(textShadow: KRRichTextShadow, layoutParams: ViewGroup.LayoutParams?): KRRichTextViewDrawer? {
@@ -220,41 +225,10 @@ class KRRichTextView(context: Context) : KRView(context) {
     fun setSelectionByCoordinate(
         x: Float,
         y: Float,
-        type: SelectionType
+        type: SelectionType,
+        force: Boolean = false
     ): Boolean {
-        textDrawer?.also {
-            it.textLayout?.also { layout ->
-                val size = layout.text.length
-                if (size > 0) {
-                    val position = getOffsetForPosition(
-                        layout, x, y,
-                        checkStartEdge = false,
-                        checkEndEdge = true
-                    )
-                    if (0 <= position && position < size) {
-                        when (type) {
-                            SelectionType.CHARACTER -> {
-                                var line = layout.getLineForOffset(position)
-                                if (y < layout.getLineTop(line) && position > 0) {
-                                    setTextSelection(it, position - 1, position)
-                                } else {
-                                    setTextSelection(it, position, position + 1)
-                                }
-                            }
-
-                            else -> {
-                                // todo handle word and paragraph
-                                setTextSelection(it, position, position + 1)
-                            }
-                        }
-                        return true
-                    }
-                }
-            }
-            setTextSelection(it, INVALID_OFFSET, INVALID_OFFSET)
-            return false
-        }
-        return false
+        return textDrawer?.setSelectionByCoordinate(x, y, type, force) ?: false
     }
 
     /**
@@ -268,179 +242,32 @@ class KRRichTextView(context: Context) : KRView(context) {
         checkStartEdge: Boolean,
         checkEndEdge: Boolean,
         force: Boolean = false
-    ): Boolean {
-        textDrawer?.also {
-            it.textLayout?.also { layout ->
-                var pos1: Int
-                var pos2: Int
-                val size = layout.text.length
-                if (size == 0) {
-                    pos1 = INVALID_OFFSET
-                    pos2 = INVALID_OFFSET
-                } else {
-                    pos1 = getOffsetForPosition(layout, x1, y1, checkStartEdge, checkEndEdge)
-                    pos2 = getOffsetForPosition(layout, x2, y2, checkStartEdge, checkEndEdge)
-                    if (pos1 == pos2) {
-                        if (force) {
-                            if (shouldExpandSelectionBackward(layout, x1, y1, x2, y2, pos2)) {
-                                pos1 -= 1
-                            } else {
-                                pos2 += 1
-                            }
-                        } else {
-                            pos1 = INVALID_OFFSET
-                            pos2 = INVALID_OFFSET
-                        }
-                    } else if (pos1 > pos2) {
-                        val temp = pos1
-                        pos1 = pos2
-                        pos2 = temp
-                    }
-                }
-                setTextSelection(it, pos1, pos2)
-            }
-            return it.hasSelection
-        }
-        return false
-    }
-
-    private fun shouldExpandSelectionBackward(
-        layout: Layout,
-        x1: Float,
-        y1: Float,
-        x2: Float,
-        y2: Float,
-        position: Int
-    ): Boolean {
-        val line = layout.getLineForOffset(position)
-        return (line > 0 && y2 < layout.getLineTop(line)) ||
-                (position == layout.text.length) ||
-                (x2 < x1 && position != layout.getLineStart(line))
-    }
+    ): Boolean =
+        textDrawer?.setSelectionByCoordinates(x1, y1, x2, y2, checkStartEdge, checkEndEdge, force)
+            ?: false
 
     fun clearSelection() {
-        textDrawer?.also {
-            setTextSelection(it, INVALID_OFFSET, INVALID_OFFSET)
-        }
+        textDrawer?.clearSelection()
     }
 
-    private fun setTextSelection(drawer: KRRichTextViewDrawer, start: Int, end: Int) {
-        if (drawer.selectionStart != start || drawer.selectionEnd != end) {
-            drawer.selectionStart = start
-            drawer.selectionEnd = end
-            invalidate()
-        }
-    }
+    fun getSelectionStartPosition(): Pair<Float, Float> = textDrawer!!.getSelectionStartPosition()
 
-    private fun getOffsetForPosition(
-        layout: Layout,
-        x: Float,
-        y: Float,
-        checkStartEdge: Boolean,
-        checkEndEdge: Boolean
-    ): Int {
-        val line: Int = layout.getLineForVertical(y.toInt())
-        if (checkStartEdge && line == 0 && y < layout.getLineTop(0)) {
-            return 0
-        }
-        if (checkEndEdge && line == layout.lineCount - 1 && y > layout.getLineBottom(line)) {
-            return layout.text.length
-        }
-        if ((x > width && layout.getParagraphDirection(line) == Layout.DIR_LEFT_TO_RIGHT) ||
-            (x < 0 && layout.getParagraphDirection(line) == Layout.DIR_RIGHT_TO_LEFT)) {
-            return layout.getLineEnd(line)
-        }
-        return layout.getOffsetForHorizontal(line, x)
-    }
+    fun getSelectionEndPosition(): Pair<Float, Float> = textDrawer!!.getSelectionEndPosition()
 
-    fun getSelectionStartPosition(): Pair<Float, Float> {
-        val it = textDrawer!!
-        return getPositionForOffset(it.textLayout!!, it.selectionStart, true)
-    }
-
-    fun getSelectionEndPosition(): Pair<Float, Float> {
-        val it = textDrawer!!
-        return getPositionForOffset(it.textLayout!!, it.selectionEnd, false)
-    }
-
-    private fun getPositionForOffset(layout: Layout, offset: Int, isStart: Boolean): Pair<Float, Float> {
-        var line: Int = layout.getLineForOffset(offset)
-        val x: Float
-        if (!isStart && line > 0 && offset == layout.getLineStart(line)) {
-            // end-offset is at the beginning of line, use end of previous line
-            line -= 1
-            x = if (layout.getParagraphDirection(line) == Layout.DIR_LEFT_TO_RIGHT) {
-                layout.width + 0.1f // add 0.1f to stay out of the previous character's bounds
-            } else {
-                -0.1f
-            }
-        } else {
-            x = layout.getPrimaryHorizontal(offset)
-        }
-        val y: Float = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            layout.getLineBottom(line, false)
-        } else {
-            layout.getLineBottom(line)
-        }).toFloat()
-        return Pair(x, y)
-    }
-
-    fun getSelectionRect(dest: RectF): Boolean {
-        textDrawer?.also {
-            it.textLayout?.also { layout ->
-                if (it.hasSelection) {
-                    val startline: Int = layout.getLineForOffset(it.selectionStart)
-                    val endline: Int = layout.getLineForOffset(it.selectionEnd)
-                    dest.top = layout.getLineTop(startline).toFloat()
-                    dest.bottom = layout.getLineBottom(endline).toFloat()
-                    if (startline == endline) {
-                        dest.left = layout.getPrimaryHorizontal(it.selectionStart)
-                        dest.right = layout.getPrimaryHorizontal(it.selectionEnd)
-                    } else {
-                        dest.left = 0f
-                        dest.right = layout.width.toFloat()
-                    }
-                    return true
-                }
-            }
-        }
-        dest.left = 0f
-        dest.top = 0f
-        dest.right = 0f
-        dest.bottom = 0f
-        return false
-    }
+    fun getSelectionRect(dest: RectF): Boolean = textDrawer?.getSelectionRect(dest) ?: false
 
     /**
      * get selection path
      *
      * @return weather has selection
      */
-    fun getSelectionPath(dest: Path): Boolean {
-        textDrawer?.also {
-            if (it.selectionStart < 0 || it.selectionEnd < 0 || it.selectionStart == it.selectionEnd) {
-                return false
-            }
-            val layout = it.textLayout ?: return false
-            layout.getSelectionPath(it.selectionStart, it.selectionEnd, dest)
-            return true
-        }
-        return false
-    }
+    fun getSelectionPath(dest: Path): Boolean = textDrawer?.getSelectionPath(dest) ?: false
 
-    fun getSelectionText(): String {
-        textDrawer?.also {
-            if (it.hasSelection) {
-                return it.textLayout!!.text.substring(it.selectionStart, it.selectionEnd)
-            }
-        }
-        return ""
-    }
+    fun getSelectionText(): String = textDrawer?.getSelectionText() ?: ""
 
     companion object {
         const val VIEW_NAME = "KRRichTextView"
         const val GRADIENT_RICH_TEXT_VIEW = "KRGradientRichTextView"
-        private const val INVALID_OFFSET = -1
     }
 }
 
@@ -652,7 +479,7 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
     /**
      * 是否是富文本形式
      */
-    var isRichTextMode = false	
+    var isRichTextMode = false
 
     private val textPaint by lazy {
         // kuiklyRenderContext是在KRRichTextShadow创建后才赋值的，因此这里需要 lazy，保证获取textPaint

@@ -189,6 +189,37 @@ internal class KRTextSelector(
      * active selecting mode
      */
     private var active: Boolean = false
+        set(value) {
+            if (field == value) {
+                return
+            }
+            field = value
+            if (value) {
+                subscribeSelectionHandleUpdate()
+                view.activity?.also {
+                    it.addContentView(
+                        focusHelperView, ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                    )
+                    focusHelperView.requestFocus()
+                    focusHelperView.onFocusChangeListener =
+                        View.OnFocusChangeListener { _, hasFocus ->
+                            if (!hasFocus) {
+                                this@KRTextSelector.clearSelection()
+                            }
+                        }
+                }
+            } else {
+                view.activity?.also {
+                    focusHelperView.onFocusChangeListener = null
+                    focusHelperView.clearFocus()
+                    (focusHelperView.parent as? ViewGroup)?.removeView(focusHelperView)
+                }
+                unsubscribeSelectionHandleUpdate()
+            }
+        }
     private var selectionRect = RectF()
 
     // Dragging state: fixed cursor stays, movable cursor follows finger
@@ -326,7 +357,6 @@ internal class KRTextSelector(
     /** @param option JSON with "x", "y" coordinates and optional "type" for selection granularity */
     fun createSelection(option: JSONObject) {
         logInfo { "createSelection: $option" }
-        val wasActive = active
         if (active) {
             forEachText { _, _ -> this.clearSelection() }
         }
@@ -344,21 +374,22 @@ internal class KRTextSelector(
         val oldTop = selectionRect.top
         val oldRight = selectionRect.right
         val oldBottom = selectionRect.bottom
-        active = createSelectionInternal(x, y, type)
-        if (active) {
-            if (!wasActive) {
-                notifySelectStart()
-            } else if (selectionRect.left != oldLeft || selectionRect.top != oldTop ||
-                selectionRect.right != oldRight || selectionRect.bottom != oldBottom
+        val created = createSelectionInternal(x, y, type)
+        if (created) {
+            if (!active || (selectionRect.left != oldLeft || selectionRect.top != oldTop ||
+                        selectionRect.right != oldRight || selectionRect.bottom != oldBottom)
             ) {
-                notifySelectChange()
+                notifySelectStart()
             }
-        } else if (wasActive) {
+        } else if (active) {
             notifySelectCancel()
         }
     }
 
-    /** Creates selection at coordinate, iterating views from y-axis to x-axis */
+    /**
+     * Creates selection at coordinate, iterating views from y-axis to x-axis
+     * @return true if selection was created
+     */
     private fun createSelectionInternal(x: Float, y: Float, type: SelectionType): Boolean {
         reusableTextViewList.clear()
         forEachText { offsetX, offsetY ->
@@ -396,11 +427,53 @@ internal class KRTextSelector(
                 return true
             }
         }
+        // unfortunately no hit, try to select the closest text view
+        findClosestTextView(x, y)?.also { (textView, offsetX, offsetY) ->
+            logInfo { "closest view hash=${textView.hashCode()}" }
+            if (textView.setSelectionByCoordinate(x - offsetX, y - offsetY, type, force = true)) {
+                textView.getSelectionStartPosition().also { (px, py) ->
+                    cursorStartX = px + offsetX
+                    cursorStartY = py + offsetY
+                }
+                textView.getSelectionEndPosition().also { (px, py) ->
+                    cursorEndX = px + offsetX
+                    cursorEndY = py + offsetY
+                }
+                textView.getSelectionRect(reusableRect)
+                selectionRect.left = reusableRect.left + offsetX
+                selectionRect.top = reusableRect.top + offsetY
+                selectionRect.right = reusableRect.right + offsetX
+                selectionRect.bottom = reusableRect.bottom + offsetY
+                return true
+            }
+        }
+        logInfo { "create selection failed" }
         cursorStartX = Float.NaN
         cursorStartY = Float.NaN
         cursorEndX = Float.NaN
         cursorEndY = Float.NaN
         return false
+    }
+
+    private fun findClosestTextView(x: Float, y: Float): Triple<KRRichTextView, Int, Int>? {
+        var distance = Float.MAX_VALUE
+        var textView: KRRichTextView? = null
+        var offsetX = 0
+        var offsetY = 0
+        forEachText { oX, oY ->
+            if (visibility == View.VISIBLE && length() > 0) {
+                val cx = oX + width / 2f
+                val cy = oY + height / 2f
+                val d = (cx - x) * (cx - x) + (cy - y) * (cy - y)
+                if (d < distance) {
+                    distance = d
+                    textView = this
+                    offsetX = oX
+                    offsetY = oY
+                }
+            }
+        }
+        return textView?.let { Triple(it, offsetX, offsetY) }
     }
 
     fun selectAll() {
@@ -466,13 +539,10 @@ internal class KRTextSelector(
             selectionRect.top = selectionTop
             selectionRect.right = selectionRight
             selectionRect.bottom = selectionBottom
-            if (!active) {
-                active = true
-                notifySelectStart()
-            } else if (selectionRect.left != oldLeft || selectionRect.top != oldTop ||
-                selectionRect.right != oldRight || selectionRect.bottom != oldBottom
+            if (!active || (selectionRect.left != oldLeft || selectionRect.top != oldTop ||
+                        selectionRect.right != oldRight || selectionRect.bottom != oldBottom)
             ) {
-                notifySelectChange()
+                notifySelectStart()
             }
         }
     }
@@ -575,22 +645,8 @@ internal class KRTextSelector(
     )
 
     private fun notifySelectStart() {
+        active = true
         selectStartCallback?.invoke(generateSelectEventParam())
-        subscribeSelectionHandleUpdate()
-        view.activity?.also {
-            it.addContentView(
-                focusHelperView, ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            )
-            focusHelperView.requestFocus()
-            focusHelperView.onFocusChangeListener = View.OnFocusChangeListener { _, hasFocus ->
-                if (!hasFocus) {
-                    this@KRTextSelector.clearSelection()
-                }
-            }
-        }
         updateSelectionHandles()
     }
 
@@ -605,13 +661,8 @@ internal class KRTextSelector(
     }
 
     private fun notifySelectCancel() {
-        view.activity?.also {
-            focusHelperView.onFocusChangeListener = null
-            focusHelperView.clearFocus()
-            (focusHelperView.parent as? ViewGroup)?.removeView(focusHelperView)
-        }
+        active = false
         selectCancelCallback?.invoke(null)
-        unsubscribeSelectionHandleUpdate()
         cursorStartView.dismiss()
         cursorEndView.dismiss()
     }
@@ -635,7 +686,6 @@ internal class KRTextSelector(
     fun clearSelection() {
         logInfo { "clearSelection active=$active" }
         if (active) {
-            active = false
             forEachText { _, _ -> clearSelection() }
             notifySelectCancel()
         }
