@@ -19,11 +19,13 @@ internal class TextSelectionExamplePage : BasePager() {
     private var selectedText by observable("")
     private var selectionFrame by observable("")
     private var selectionStatus by observable("未选择")
+    private var selectionType by observable(SelectionType.CHARACTER)
 
     // Reference to the selectable container
     private var selectableContainer: ViewRef<DivView>? = null
 
     override fun body(): ViewBuilder {
+        val ctx = this
         return {
             attr {
                 backgroundColor(Color.WHITE)
@@ -53,7 +55,7 @@ internal class TextSelectionExamplePage : BasePager() {
                         attr {
                             fontSize(14f)
                             color(Color(0xFF666666))
-                            text("状态: ${this@TextSelectionExamplePage.selectionStatus}")
+                            text("状态: ${ctx.selectionStatus}")
                         }
                     }
                     Text {
@@ -61,7 +63,7 @@ internal class TextSelectionExamplePage : BasePager() {
                             fontSize(12f)
                             color(Color(0xFF999999))
                             marginTop(4f)
-                            text("选区: ${this@TextSelectionExamplePage.selectionFrame}")
+                            text("选区: ${ctx.selectionFrame}")
                         }
                     }
                     Text {
@@ -69,18 +71,53 @@ internal class TextSelectionExamplePage : BasePager() {
                             fontSize(12f)
                             color(Color(0xFF333333))
                             marginTop(4f)
-                            text("选中内容: ${this@TextSelectionExamplePage.selectedText}")
+                            text("选中内容: ${ctx.selectedText}")
+                            lines(3)
+                        }
+                    }
+                    Text {
+                        attr {
+                            fontSize(12f)
+                            color(Color(0xFF333333))
+                            marginTop(4f)
+                            text("长按类型: ${ctx.selectionType}")
                             lines(3)
                         }
                     }
                 }
 
                 // Section: Control Buttons Row 1
+
                 View {
                     attr {
                         flexDirectionRow()
                         justifyContentSpaceBetween()
                         marginBottom(8f)
+                    }
+                    // Select Char Button
+                    View {
+                        attr {
+                            flex(1f)
+                            backgroundColor(Color(0xFF009688))
+                            padding(top = 10f, bottom = 10f)
+                            borderRadius(6f)
+                            marginRight(8f)
+                            alignItemsCenter()
+                        }
+                        event {
+                            click {
+                                ctx.selectionType = SelectionType.CHARACTER
+                                // Trigger char selection at center of container
+                                ctx.selectableContainer?.view?.createSelection(150f, 80f, ctx.selectionType)
+                            }
+                        }
+                        Text {
+                            attr {
+                                fontSize(14f)
+                                color(Color.WHITE)
+                                text("选择字符")
+                            }
+                        }
                     }
 
                     // Select Word Button
@@ -95,8 +132,9 @@ internal class TextSelectionExamplePage : BasePager() {
                         }
                         event {
                             click {
+                                ctx.selectionType = SelectionType.WORD
                                 // Trigger word selection at center of container
-                                this@TextSelectionExamplePage.selectableContainer?.view?.createSelection(150f, 80f, SelectionType.WORD)
+                                ctx.selectableContainer?.view?.createSelection(150f, 80f, ctx.selectionType)
                             }
                         }
                         Text {
@@ -120,7 +158,8 @@ internal class TextSelectionExamplePage : BasePager() {
                         }
                         event {
                             click {
-                                this@TextSelectionExamplePage.selectableContainer?.view?.createSelection(150f, 80f, SelectionType.SENTENCE)
+                                ctx.selectionType = SelectionType.SENTENCE
+                                ctx.selectableContainer?.view?.createSelection(150f, 80f, ctx.selectionType)
                             }
                         }
                         Text {
@@ -143,7 +182,8 @@ internal class TextSelectionExamplePage : BasePager() {
                         }
                         event {
                             click {
-                                this@TextSelectionExamplePage.selectableContainer?.view?.createSelection(150f, 80f, SelectionType.PARAGRAPH)
+                                ctx.selectionType = SelectionType.PARAGRAPH
+                                ctx.selectableContainer?.view?.createSelection(150f, 80f, ctx.selectionType)
                             }
                         }
                         Text {
@@ -176,7 +216,7 @@ internal class TextSelectionExamplePage : BasePager() {
                         }
                         event {
                             click {
-                                this@TextSelectionExamplePage.selectableContainer?.view?.createSelectionAll()
+                                ctx.selectableContainer?.view?.createSelectionAll()
                             }
                         }
                         Text {
@@ -199,10 +239,10 @@ internal class TextSelectionExamplePage : BasePager() {
                         }
                         event {
                             click {
-                                this@TextSelectionExamplePage.selectableContainer?.view?.clearSelection()
-                                this@TextSelectionExamplePage.selectedText = ""
-                                this@TextSelectionExamplePage.selectionFrame = ""
-                                this@TextSelectionExamplePage.selectionStatus = "已清除"
+                                ctx.selectableContainer?.view?.clearSelection()
+                                ctx.selectedText = ""
+                                ctx.selectionFrame = ""
+                                ctx.selectionStatus = "已清除"
                             }
                         }
                         Text {
@@ -226,10 +266,10 @@ internal class TextSelectionExamplePage : BasePager() {
                     }
                     event {
                         click {
-                            this@TextSelectionExamplePage.selectableContainer?.view?.getSelection { texts ->
-                                this@TextSelectionExamplePage.selectedText = texts.joinToString(" | ")
+                            ctx.selectableContainer?.view?.getSelection { texts ->
+                                ctx.selectedText = texts.joinToString(" | ")
                                 if (texts.isEmpty()) {
-                                    this@TextSelectionExamplePage.selectionStatus = "无选中内容"
+                                    ctx.selectionStatus = "无选中内容"
                                 }
                             }
                         }
@@ -246,7 +286,7 @@ internal class TextSelectionExamplePage : BasePager() {
                 // Section: Selectable Text Container
                 View {
                     ref {
-                        this@TextSelectionExamplePage.selectableContainer = it
+                        ctx.selectableContainer = it
                     }
                     attr {
                         backgroundColor(Color(0xFFFFFDE7))
@@ -259,24 +299,29 @@ internal class TextSelectionExamplePage : BasePager() {
                         selectionColor(Color(0xFF2196F3))
                     }
                     event {
+                        longPress {
+                            if (it.state == "start") {
+                                ctx.selectableContainer?.view?.createSelection(it.x, it.y, ctx.selectionType)
+                            }
+                        }
                         selectStart { frame ->
-                            this@TextSelectionExamplePage.selectionStatus = "选择开始"
-                            this@TextSelectionExamplePage.selectionFrame = "x:${frame.x.toInt()}, y:${frame.y.toInt()}, w:${frame.width.toInt()}, h:${frame.height.toInt()}"
+                            ctx.selectionStatus = "选择开始"
+                            ctx.selectionFrame = "x:${frame.x.toInt()}, y:${frame.y.toInt()}, w:${frame.width.toInt()}, h:${frame.height.toInt()}"
                             KLog.i("TextSelection", "Selection started: $frame")
                         }
                         selectChange { frame ->
-                            this@TextSelectionExamplePage.selectionStatus = "选择中..."
-                            this@TextSelectionExamplePage.selectionFrame = "x:${frame.x.toInt()}, y:${frame.y.toInt()}, w:${frame.width.toInt()}, h:${frame.height.toInt()}"
+                            ctx.selectionStatus = "选择中..."
+                            ctx.selectionFrame = "x:${frame.x.toInt()}, y:${frame.y.toInt()}, w:${frame.width.toInt()}, h:${frame.height.toInt()}"
                         }
                         selectEnd { frame ->
-                            this@TextSelectionExamplePage.selectionStatus = "选择结束"
-                            this@TextSelectionExamplePage.selectionFrame = "x:${frame.x.toInt()}, y:${frame.y.toInt()}, w:${frame.width.toInt()}, h:${frame.height.toInt()}"
+                            ctx.selectionStatus = "选择结束"
+                            ctx.selectionFrame = "x:${frame.x.toInt()}, y:${frame.y.toInt()}, w:${frame.width.toInt()}, h:${frame.height.toInt()}"
                             KLog.i("TextSelection", "Selection ended: $frame")
                         }
                         selectCancel {
-                            this@TextSelectionExamplePage.selectionStatus = "选择取消"
-                            this@TextSelectionExamplePage.selectionFrame = ""
-                            this@TextSelectionExamplePage.selectedText = ""
+                            ctx.selectionStatus = "选择取消"
+                            ctx.selectionFrame = ""
+                            ctx.selectedText = ""
                             KLog.i("TextSelection", "Selection cancelled")
                         }
                     }
@@ -298,7 +343,7 @@ internal class TextSelectionExamplePage : BasePager() {
                             fontSize(15f)
                             color(Color(0xFF444444))
                             lineHeight(22f)
-                            text("Kuikly是一个跨平台的UI框架，支持iOS、Android和Web平台。它使用Kotlin Multiplatform技术，让开发者可以使用统一的代码库来构建多平台应用。")
+                            text("Kuikly是一个跨平台的UI框架，支持iOS、Android和Web平台。它使用Kotlin Multiplatform技术，让开发者可以使用统一的代码库来构建多平台应用。\nKuikly是一个跨平台的UI框架，支持iOS、Android和Web平台。它使用Kotlin Multiplatform技术，让开发者可以使用统一的代码库来构建多平台应用。\n")
                             marginBottom(12f)
                         }
                     }
@@ -345,6 +390,36 @@ internal class TextSelectionExamplePage : BasePager() {
                             fontSize(15f)
                             color(Color(0xFF444444))
                             text("的文字，同样支持选择。")
+                        }
+                    }
+
+                    // ImageSpan and Emoji
+                    RichText {
+                        attr {
+                            marginBottom(12f)
+                        }
+                        Span {
+                            fontSize(15f)
+                            color(Color(0xFF444444))
+                            text("Here is some ")
+                        }
+                        ImageSpan {
+                            src("https://wfiles.gtimg.cn/wuji_dashboard/xy/starter/baa91edc.png")
+                            size(30f, 30f)
+                            description("kuikly logo")
+                        }
+                        ImageSpan {
+                            src("https://wfiles.gtimg.cn/wuji_dashboard/xy/starter/baa91edc.png")
+                            size(30f, 30f)
+                            description("[logo.png]")
+                        }
+                        Span {
+                            fontSize(15f)
+                            color(Color(0xFF444444))
+                            text(" icons within text.")
+                        }
+                        Span {
+                            text("\uD83C\uDF1A\uD83C\uDF1D\uD83C\uDF1A\uD83C\uDF1D\uD83C\uDF1A")
                         }
                     }
 
