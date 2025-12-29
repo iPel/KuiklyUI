@@ -34,7 +34,7 @@ import com.tencent.kuikly.core.render.android.css.ktx.toPxI
 import com.tencent.kuikly.core.render.android.export.KuiklyRenderCallback
 import org.json.JSONObject
 
-private const val DEBUG_LOG = true
+private const val DEBUG_LOG = false
 
 private const val SELECTABLE_INHERIT = 0
 private const val SELECTABLE_ENABLE = 1
