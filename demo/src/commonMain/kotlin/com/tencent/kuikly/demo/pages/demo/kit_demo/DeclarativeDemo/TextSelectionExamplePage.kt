@@ -17,6 +17,8 @@ internal class TextSelectionExamplePage : BasePager() {
 
     // State for selected text display
     private var selectedText by observable("")
+    private var preSelectedText by observable("")
+    private var postSelectedText by observable("")
     private var selectionFrame by observable("")
     private var selectionStatus by observable("未选择")
     private var selectionType by observable(SelectionType.CHARACTER)
@@ -69,10 +71,28 @@ internal class TextSelectionExamplePage : BasePager() {
                     Text {
                         attr {
                             fontSize(12f)
+                            color(Color(0xFF999999))
+                            marginTop(4f)
+                            text("选中前内容: ${ctx.preSelectedText}")
+                            lines(1)
+                        }
+                    }
+                    Text {
+                        attr {
+                            fontSize(12f)
                             color(Color(0xFF333333))
                             marginTop(4f)
                             text("选中内容: ${ctx.selectedText}")
                             lines(3)
+                        }
+                    }
+                    Text {
+                        attr {
+                            fontSize(12f)
+                            color(Color(0xFF999999))
+                            marginTop(4f)
+                            text("选中后内容: ${ctx.postSelectedText}")
+                            lines(1)
                         }
                     }
                     Text {
@@ -241,6 +261,8 @@ internal class TextSelectionExamplePage : BasePager() {
                             click {
                                 ctx.selectableContainer?.view?.clearSelection()
                                 ctx.selectedText = ""
+                                ctx.preSelectedText = ""
+                                ctx.postSelectedText = ""
                                 ctx.selectionFrame = ""
                                 ctx.selectionStatus = "已清除"
                             }
@@ -268,6 +290,8 @@ internal class TextSelectionExamplePage : BasePager() {
                         click {
                             ctx.selectableContainer?.view?.getSelection { texts ->
                                 ctx.selectedText = texts.joinToString(" | ")
+                                ctx.preSelectedText = texts.preContent.joinToString(" | ")
+                                ctx.postSelectedText = texts.postContent.joinToString(" | ")
                                 if (texts.isEmpty()) {
                                     ctx.selectionStatus = "无选中内容"
                                 }
@@ -322,6 +346,8 @@ internal class TextSelectionExamplePage : BasePager() {
                             ctx.selectionStatus = "选择取消"
                             ctx.selectionFrame = ""
                             ctx.selectedText = ""
+                            ctx.preSelectedText = ""
+                            ctx.postSelectedText = ""
                             KLog.i("TextSelection", "Selection cancelled")
                         }
                     }

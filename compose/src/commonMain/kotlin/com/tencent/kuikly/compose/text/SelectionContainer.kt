@@ -36,6 +36,7 @@ import com.tencent.kuikly.core.layout.Frame
 import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
 import com.tencent.kuikly.core.views.DivView
 import com.tencent.kuikly.core.views.SelectableOption
+import com.tencent.kuikly.core.views.SelectionResult
 import com.tencent.kuikly.core.views.SelectionType
 
 /**
@@ -102,7 +103,7 @@ val LocalSelectionEnabled = compositionLocalOf { true }
  * @param content The content to be wrapped with selection capability
  */
 @Composable
-fun SelectionContainer(
+private fun SelectionContainer(
     modifier: Modifier = Modifier,
     selectionColor: Color? = null,
     onSelectStart: ((SelectionFrame) -> Unit)? = null,
@@ -263,12 +264,6 @@ class SelectionContainerState internal constructor(
     private var boundView: DivView? = null
     
     /**
-     * The currently selected texts as a list of strings.
-     */
-    var selectedTexts by mutableStateOf<List<String>>(emptyList())
-        private set
-    
-    /**
      * The current selection frame (in pixels).
      */
     var selectionFrame by mutableStateOf(SelectionFrame.Zero)
@@ -305,15 +300,12 @@ class SelectionContainerState internal constructor(
      *
      * @param callback Callback with the list of selected text strings
      */
-    fun getSelection(callback: (List<String>) -> Unit) {
+    fun getSelection(callback: (SelectionResult) -> Unit) {
         val view = boundView
         if (view != null) {
-            view.getSelection { texts ->
-                selectedTexts = texts
-                callback(texts)
-            }
+            view.getSelection(callback)
         } else {
-            callback(emptyList())
+            callback(SelectionResult.EMPTY)
         }
     }
     
@@ -322,7 +314,6 @@ class SelectionContainerState internal constructor(
      */
     fun clearSelection() {
         boundView?.clearSelection()
-        selectedTexts = emptyList()
         selectionFrame = SelectionFrame.Zero
     }
     

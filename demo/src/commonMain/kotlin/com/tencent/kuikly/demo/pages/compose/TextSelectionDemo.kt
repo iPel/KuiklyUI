@@ -54,6 +54,8 @@ private fun TextSelectionDemoContent() {
     var selectionStatus by remember { mutableStateOf("未选择") }
     var selectionFrameText by remember { mutableStateOf("") }
     var selectedText by remember { mutableStateOf("") }
+    var preSelectedText by remember { mutableStateOf("") }
+    var postSelectedText by remember { mutableStateOf("") }
     
     val selectionState = rememberSelectionContainerState()
     
@@ -92,9 +94,19 @@ private fun TextSelectionDemoContent() {
                 color = Color(0xFF999999)
             )
             Text(
+                text = "选中前内容: $preSelectedText",
+                fontSize = 12.sp,
+                color = Color(0xFF999999)
+            )
+            Text(
                 text = "选中内容: $selectedText",
                 fontSize = 12.sp,
                 color = Color(0xFF333333)
+            )
+            Text(
+                text = "选中后内容: $postSelectedText",
+                fontSize = 12.sp,
+                color = Color(0xFF999999)
             )
         }
         
@@ -152,6 +164,8 @@ private fun TextSelectionDemoContent() {
                     .clickable {
                         selectionState.clearSelection()
                         selectedText = ""
+                        preSelectedText = ""
+                        postSelectedText = ""
                         selectionFrameText = ""
                         selectionStatus = "已清除"
                     }
@@ -177,6 +191,8 @@ private fun TextSelectionDemoContent() {
                 .clickable {
                     selectionState.getSelection { texts ->
                         selectedText = texts.joinToString(" | ")
+                        preSelectedText = texts.preContent.joinToString(" | ")
+                        postSelectedText = texts.postContent.joinToString(" | ")
                         if (texts.isEmpty()) {
                             selectionStatus = "无选中内容"
                         }
@@ -219,6 +235,8 @@ private fun TextSelectionDemoContent() {
                 selectionStatus = "选择取消"
                 selectionFrameText = ""
                 selectedText = ""
+                preSelectedText = ""
+                postSelectedText = ""
             }
         ) {
             Column {
