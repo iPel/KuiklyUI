@@ -246,6 +246,8 @@ class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.C
         textDrawer?.setSelectionByCoordinates(x1, y1, x2, y2, checkStartEdge, checkEndEdge, force)
             ?: false
 
+    fun hasSelection(): Boolean = textDrawer?.hasSelection ?: false
+
     fun clearSelection() {
         textDrawer?.clearSelection()
     }
@@ -264,6 +266,12 @@ class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.C
     fun getSelectionPath(dest: Path): Boolean = textDrawer?.getSelectionPath(dest) ?: false
 
     fun getSelectionText(): String = textDrawer?.getSelectionText() ?: ""
+
+    fun getPreSelectionText(): String = textDrawer?.getPreSelectionText() ?: ""
+
+    fun getPostSelectionText(): String = textDrawer?.getPostSelectionText() ?: ""
+
+    fun getText(): String = textDrawer?.textLayout?.text?.toString() ?: ""
 
     companion object {
         const val VIEW_NAME = "KRRichTextView"

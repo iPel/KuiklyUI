@@ -306,8 +306,8 @@ private fun TextSelectionGestureDemoContent() {
                 onCopy = {
                     selectionState.getSelection { texts ->
                         selectedText = texts.joinToString(" ")
-                        preSelectedText = texts.preContent.joinToString { " " }
-                        postSelectedText = texts.postContent.joinToString { " " }
+                        preSelectedText = texts.preContent.joinToString(" ")
+                        postSelectedText = texts.postContent.joinToString(" ")
                         KLog.i("TextSelectionGesture", "Copied: $selectedText")
                     }
                     showMenu = false

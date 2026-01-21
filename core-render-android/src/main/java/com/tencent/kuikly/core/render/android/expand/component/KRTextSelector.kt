@@ -121,6 +121,14 @@ internal class KRTextSelector(
             return defValue
         }
 
+        private inline fun <reified T, R> ArrayList<T>.use(block: (list: ArrayList<T>) -> R): R {
+            try {
+                return block(this)
+            } finally {
+                this.clear()
+            }
+        }
+
     }
 
     private inline val kuiklyContext get() = view.kuiklyRenderContext
@@ -414,74 +422,81 @@ internal class KRTextSelector(
      * @return true if selection was created
      */
     private fun createSelectionInternal(x: Float, y: Float, type: SelectionType): Boolean {
-        reusableTextViewList.clear()
-        forEachText { offsetX, offsetY ->
-            // check hit, visible and has content
-            if (x < offsetX + this.width && x >= offsetX &&
-                y < offsetY + this.height && y >= offsetY &&
-                this.visibility == View.VISIBLE && this.length() > 0
-            ) {
-                reusableTextViewList.add(Triple(this, offsetX, offsetY))
+        reusableTextViewList.use { list ->
+            forEachText { offsetX, offsetY ->
+                // check hit, visible and has content
+                if (x < offsetX + this.width && x >= offsetX &&
+                    y < offsetY + this.height && y >= offsetY &&
+                    this.visibility == View.VISIBLE && this.length() > 0
+                ) {
+                    list.add(Triple(this, offsetX, offsetY))
+                }
             }
-        }
-        logInfo { "collect size=${reusableTextViewList.size}" }
-        // sort by top-left-coordinate, top to bottom, left to right
-        reusableTextViewList.sortWith(
-            Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
-        )
-        // Reverse iterate to find hit
-        for (i in reusableTextViewList.size - 1 downTo 0) {
-            val (textView, offsetX, offsetY) = reusableTextViewList[i]
-            if (textView.setSelectionByCoordinate(x - offsetX, y - offsetY, type)) {
-                textView.getStartSelectionEdge().also { (px, pt, pb) ->
-                    cursorStartX = px + offsetX
-                    cursorStartTop = pt + offsetY
-                    cursorStartBottom = pb + offsetY
+            logInfo { "collect size=${list.size}" }
+            // sort by top-left-coordinate, top to bottom, left to right
+            list.sortWith(
+                Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
+            )
+            // Reverse iterate to find hit
+            for (i in list.size - 1 downTo 0) {
+                val (textView, offsetX, offsetY) = list[i]
+                if (textView.setSelectionByCoordinate(x - offsetX, y - offsetY, type)) {
+                    textView.getStartSelectionEdge().also { (px, pt, pb) ->
+                        cursorStartX = px + offsetX
+                        cursorStartTop = pt + offsetY
+                        cursorStartBottom = pb + offsetY
+                    }
+                    textView.getEndSelectionEdge().also { (px, pt, pb) ->
+                        cursorEndX = px + offsetX
+                        cursorEndTop = pt + offsetY
+                        cursorEndBottom = pb + offsetY
+                    }
+                    logInfo { "position hit i=$i view hash=${textView.hashCode()}" }
+                    textView.getSelectionRect(reusableRect)
+                    selectionRect.left = reusableRect.left + offsetX
+                    selectionRect.top = reusableRect.top + offsetY
+                    selectionRect.right = reusableRect.right + offsetX
+                    selectionRect.bottom = reusableRect.bottom + offsetY
+                    return true
                 }
-                textView.getEndSelectionEdge().also { (px, pt, pb) ->
-                    cursorEndX = px + offsetX
-                    cursorEndTop = pt + offsetY
-                    cursorEndBottom = pb + offsetY
-                }
-                logInfo { "position hit i=$i view hash=${textView.hashCode()}" }
-                textView.getSelectionRect(reusableRect)
-                selectionRect.left = reusableRect.left + offsetX
-                selectionRect.top = reusableRect.top + offsetY
-                selectionRect.right = reusableRect.right + offsetX
-                selectionRect.bottom = reusableRect.bottom + offsetY
-                return true
             }
-        }
-        // unfortunately no hit, try to select the closest text view
-        findClosestTextView(x, y)?.also { (textView, offsetX, offsetY) ->
-            logInfo { "closest view hash=${textView.hashCode()}" }
-            if (textView.setSelectionByCoordinate(x - offsetX, y - offsetY, type, force = true)) {
-                textView.getStartSelectionEdge().also { (px, pt, pb) ->
-                    cursorStartX = px + offsetX
-                    cursorStartTop = pt + offsetY
-                    cursorStartBottom = pb + offsetY
+            // unfortunately no hit, try to select the closest text view
+            findClosestTextView(x, y)?.also { (textView, offsetX, offsetY) ->
+                logInfo { "closest view hash=${textView.hashCode()}" }
+                if (textView.setSelectionByCoordinate(
+                        x - offsetX,
+                        y - offsetY,
+                        type,
+                        force = true
+                    )
+                ) {
+                    textView.getStartSelectionEdge().also { (px, pt, pb) ->
+                        cursorStartX = px + offsetX
+                        cursorStartTop = pt + offsetY
+                        cursorStartBottom = pb + offsetY
+                    }
+                    textView.getEndSelectionEdge().also { (px, pt, pb) ->
+                        cursorEndX = px + offsetX
+                        cursorEndTop = pt + offsetY
+                        cursorEndBottom = pb + offsetY
+                    }
+                    textView.getSelectionRect(reusableRect)
+                    selectionRect.left = reusableRect.left + offsetX
+                    selectionRect.top = reusableRect.top + offsetY
+                    selectionRect.right = reusableRect.right + offsetX
+                    selectionRect.bottom = reusableRect.bottom + offsetY
+                    return true
                 }
-                textView.getEndSelectionEdge().also { (px, pt, pb) ->
-                    cursorEndX = px + offsetX
-                    cursorEndTop = pt + offsetY
-                    cursorEndBottom = pb + offsetY
-                }
-                textView.getSelectionRect(reusableRect)
-                selectionRect.left = reusableRect.left + offsetX
-                selectionRect.top = reusableRect.top + offsetY
-                selectionRect.right = reusableRect.right + offsetX
-                selectionRect.bottom = reusableRect.bottom + offsetY
-                return true
             }
+            logInfo { "create selection failed" }
+            cursorStartX = Float.NaN
+            cursorStartTop = Float.NaN
+            cursorStartBottom = Float.NaN
+            cursorEndX = Float.NaN
+            cursorEndTop = Float.NaN
+            cursorEndBottom = Float.NaN
+            return false
         }
-        logInfo { "create selection failed" }
-        cursorStartX = Float.NaN
-        cursorStartTop = Float.NaN
-        cursorStartBottom = Float.NaN
-        cursorEndX = Float.NaN
-        cursorEndTop = Float.NaN
-        cursorEndBottom = Float.NaN
-        return false
     }
 
     private fun findClosestTextView(x: Float, y: Float): Triple<KRRichTextView, Int, Int>? {
@@ -581,93 +596,94 @@ internal class KRTextSelector(
     /** Updates selection across multiple text views based on two points */
     private fun updateSelection(startX: Float, startY: Float, endX: Float, endY: Float) {
         logInfo { "updateSelectionByCoordinate: ($startX,$startY)-($endX,$endY)" }
-        reusableTextViewList.clear()
-        val minY = minOf(startY, endY)
-        val maxY = maxOf(startY, endY)
-        forEachText { offsetX, offsetY ->
-            // check hit, visible and has content
-            if (minY < offsetY + this.height && maxY >= offsetY &&
-                this.visibility == View.VISIBLE && this.length() > 0
-            ) {
-                reusableTextViewList.add(Triple(this, offsetX, offsetY))
-            } else {
-                clearSelection()
+        reusableTextViewList.use { list ->
+            val minY = minOf(startY, endY)
+            val maxY = maxOf(startY, endY)
+            forEachText { offsetX, offsetY ->
+                // check hit, visible and has content
+                if (minY < offsetY + this.height && maxY >= offsetY &&
+                    this.visibility == View.VISIBLE && this.length() > 0
+                ) {
+                    list.add(Triple(this, offsetX, offsetY))
+                } else {
+                    clearSelection()
+                }
             }
-        }
-        logInfo { "collect size=${reusableTextViewList.size}" }
-        // sort by top-left-coordinate, top to bottom, left to right
-        reusableTextViewList.sortWith(
-            Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
-        )
-
-        var foundStart = false
-        var foundEnd = false
-        var selectionLeft = Float.MAX_VALUE
-        var selectionTop = Float.MAX_VALUE
-        var selectionRight = Float.MIN_VALUE
-        var selectionBottom = Float.MIN_VALUE
-        val size = reusableTextViewList.size
-
-        for (i in 0 until size) {
-            val (textView, offsetX, offsetY) = reusableTextViewList[i]
-            if (foundEnd) {
-                textView.clearSelection()
-                continue
-            }
-            val hit = textView.setSelectionByCoordinates(
-                startX - offsetX,
-                startY - offsetY,
-                endX - offsetX,
-                endY - offsetY,
-                checkStartEdge = i != 0, // don't check for first select item
-                checkEndEdge = i != size - 1, // don't check for last select item
-                force = i == size - 1 && !foundStart // force select last if nothing found yet
+            logInfo { "collect size=${list.size}" }
+            // sort by top-left-coordinate, top to bottom, left to right
+            list.sortWith(
+                Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
             )
-            if (hit) {
-                textView.getSelectionRect(reusableRect)
-                selectionLeft = minOf(selectionLeft, reusableRect.left + offsetX)
-                selectionTop = minOf(selectionTop, reusableRect.top + offsetY)
-                selectionRight = maxOf(selectionRight, reusableRect.right + offsetX)
-                selectionBottom = maxOf(selectionBottom, reusableRect.bottom + offsetY)
-            }
-            if (!foundStart && hit) {
-                logInfo { "start hit i=$i view hash=${textView.hashCode()}" }
-                foundStart = true
-                textView.getStartSelectionEdge().also { (px, pt, pb) ->
-                    cursorStartX = px + offsetX
-                    cursorStartTop = pt + offsetY
-                    cursorStartBottom = pb + offsetY
+
+            var foundStart = false
+            var foundEnd = false
+            var selectionLeft = Float.MAX_VALUE
+            var selectionTop = Float.MAX_VALUE
+            var selectionRight = Float.MIN_VALUE
+            var selectionBottom = Float.MIN_VALUE
+            val size = list.size
+
+            for (i in 0 until size) {
+                val (textView, offsetX, offsetY) = list[i]
+                if (foundEnd) {
+                    textView.clearSelection()
+                    continue
                 }
-            } else if (foundStart && !hit) {
-                logInfo { "end hit i=$i view hash=${textView.hashCode()}" }
-                foundEnd = true
-                val (endTextView, endOffsetX, endOffsetY) = reusableTextViewList[i - 1]
-                endTextView.getEndSelectionEdge().also { (px, pt, pb) ->
-                    cursorEndX = px + endOffsetX
-                    cursorEndTop = pt + endOffsetY
-                    cursorEndBottom = pb + endOffsetY
+                val hit = textView.setSelectionByCoordinates(
+                    startX - offsetX,
+                    startY - offsetY,
+                    endX - offsetX,
+                    endY - offsetY,
+                    checkStartEdge = i != 0, // don't check for first select item
+                    checkEndEdge = i != size - 1, // don't check for last select item
+                    force = i == size - 1 && !foundStart // force select last if nothing found yet
+                )
+                if (hit) {
+                    textView.getSelectionRect(reusableRect)
+                    selectionLeft = minOf(selectionLeft, reusableRect.left + offsetX)
+                    selectionTop = minOf(selectionTop, reusableRect.top + offsetY)
+                    selectionRight = maxOf(selectionRight, reusableRect.right + offsetX)
+                    selectionBottom = maxOf(selectionBottom, reusableRect.bottom + offsetY)
+                }
+                if (!foundStart && hit) {
+                    logInfo { "start hit i=$i view hash=${textView.hashCode()}" }
+                    foundStart = true
+                    textView.getStartSelectionEdge().also { (px, pt, pb) ->
+                        cursorStartX = px + offsetX
+                        cursorStartTop = pt + offsetY
+                        cursorStartBottom = pb + offsetY
+                    }
+                } else if (foundStart && !hit) {
+                    logInfo { "end hit i=$i view hash=${textView.hashCode()}" }
+                    foundEnd = true
+                    val (endTextView, endOffsetX, endOffsetY) = list[i - 1]
+                    endTextView.getEndSelectionEdge().also { (px, pt, pb) ->
+                        cursorEndX = px + endOffsetX
+                        cursorEndTop = pt + endOffsetY
+                        cursorEndBottom = pb + endOffsetY
+                    }
                 }
             }
-        }
-        if (!foundStart) {
-            // this should never happen, but just in case, clear selection
-            logInfo { "updateSelection empty" }
-            handler.post { clearSelection() } // post to avoid cancel during touchMove
-            return
-        }
-        if (!foundEnd) {
-            // update end position to last
-            val (textView, offsetX, offsetY) = reusableTextViewList.last()
-            textView.getEndSelectionEdge().also { (px, pt, pb) ->
-                cursorEndX = px + offsetX
-                cursorEndTop = pt + offsetY
-                cursorEndBottom = pb + offsetY
+            if (!foundStart) {
+                // this should never happen, but just in case, clear selection
+                logInfo { "updateSelection empty" }
+                handler.post { clearSelection() } // post to avoid cancel during touchMove
+                return
             }
+            if (!foundEnd) {
+                // update end position to last
+                val (textView, offsetX, offsetY) = list.last()
+                textView.getEndSelectionEdge().also { (px, pt, pb) ->
+                    cursorEndX = px + offsetX
+                    cursorEndTop = pt + offsetY
+                    cursorEndBottom = pb + offsetY
+                }
+            }
+            selectionRect.left = selectionLeft
+            selectionRect.top = selectionTop
+            selectionRect.right = selectionRight
+            selectionRect.bottom = selectionBottom
         }
-        selectionRect.left = selectionLeft
-        selectionRect.top = selectionTop
-        selectionRect.right = selectionRight
-        selectionRect.bottom = selectionBottom
     }
 
     /** Generates callback params with bounds in dp */
@@ -703,18 +719,48 @@ internal class KRTextSelector(
 
     /** Gets selected text from all views in reading order */
     fun getSelection(callback: KuiklyRenderCallback) {
-        val result = mutableListOf<Triple<String, Int, Int>>()
-        forEachText { offsetX, offsetY ->
-            if (this.visibility != View.VISIBLE) {
-                return@forEachText
+        reusableTextViewList.use { list ->
+            forEachText { offsetX, offsetY ->
+                if (this.visibility == View.VISIBLE && this.length() > 0) {
+                    list.add(Triple(this, offsetX, offsetY))
+                }
             }
-            val selectedText = getSelectionText()
-            if (selectedText.isNotEmpty()) {
-                result.add(Triple(selectedText, offsetX, offsetY))
+            // sort by top-left-coordinate, top to bottom, left to right
+            list.sortWith(
+                Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 }
+            )
+            var startIndex = -1
+            var endIndex = -1
+            val content = mutableListOf<String>()
+            val preContent = mutableListOf<String>()
+            val postContent = mutableListOf<String>()
+            list.forEachIndexed { index, (view) ->
+                if (view.hasSelection()) {
+                    if (startIndex == -1) {
+                        startIndex = index
+                    }
+                    endIndex = index
+                    content.add(view.getSelectionText())
+                }
             }
+            if (startIndex != -1) {
+                if (startIndex > 0) {
+                    preContent.add(list[startIndex - 1].first.getText())
+                }
+                preContent.add(list[startIndex].first.getPreSelectionText())
+            }
+            if (endIndex != -1) {
+                postContent.add(list[endIndex].first.getPostSelectionText())
+                if (endIndex < list.size - 1) {
+                    postContent.add(list[endIndex + 1].first.getText())
+                }
+            }
+            callback(mapOf(
+                "content" to content,
+                "preContent" to preContent,
+                "postContent" to postContent
+            ))
         }
-        result.sortWith(Comparator { (_, x1, y1), (_, x2, y2) -> if (y1 == y2) x1 - x2 else y1 - y2 })
-        callback(mapOf("content" to result.map { (text) -> text }))
     }
 
     fun clearSelection() {

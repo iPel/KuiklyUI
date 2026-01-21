@@ -43,7 +43,7 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
 
     private var selectionStart = -1
     private var selectionEnd = -1
-    private val hasSelection: Boolean get() = 0 <= selectionStart && selectionStart < selectionEnd
+    internal val hasSelection: Boolean get() = 0 <= selectionStart && selectionStart < selectionEnd
 
     private val wordIterator by lazy(LazyThreadSafetyMode.NONE) {
         WordIterator(textLayout.text, 0, textLayout.text.length, Locale.getDefault())
@@ -190,6 +190,23 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
     internal fun getSelectionText(): String? {
         return if (hasSelection) {
             textLayout.text.substring(selectionStart, selectionEnd)
+        } else {
+            null
+        }
+    }
+
+    internal fun getPreSelectionText(): String? {
+        return if (hasSelection && selectionStart > 0) {
+            textLayout.text.substring(0, selectionStart)
+        } else {
+            null
+        }
+    }
+
+    internal fun getPostSelectionText(): String? {
+        val length = textLayout.text.length
+        return if (hasSelection && selectionEnd < length) {
+            textLayout.text.substring(selectionEnd, length)
         } else {
             null
         }
