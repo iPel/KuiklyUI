@@ -166,7 +166,9 @@ internal class KRTextSelector(
         View(view.context).apply {
             isFocusableInTouchMode = true
             setOnKeyListener { _, keyCode, event ->
-                if (event.action == KeyEvent.ACTION_UP &&
+                // we should listen ACTION_UP, but unfortunately
+                // KuiklyRenderViewDelegator.onBackPressed has higher priority
+                if (event.action == KeyEvent.ACTION_DOWN &&
                     keyCode == KeyEvent.KEYCODE_BACK
                 ) {
                     return@setOnKeyListener performBackPressed()
@@ -255,6 +257,8 @@ internal class KRTextSelector(
             null
         }
     }
+
+    private var invalidatePending = false
 
     init {
         forEachText { _, _ -> parentTextSelector = this@KRTextSelector }
@@ -855,6 +859,23 @@ internal class KRTextSelector(
                     (dragFixedY == cursorStartY && dragFixedX == cursorStartX)
         }
         return false
+    }
+
+    fun postInvalidate() {
+        logInfo { "postInvalidate active=$active pending=$invalidatePending" }
+        if (active && !invalidatePending) {
+            invalidatePending = true
+            handler.post {
+                invalidatePending = false
+                if (!active) {
+                    return@post
+                }
+                updateSelection(
+                    cursorStartX, (cursorStartTop + cursorStartBottom) / 2f,
+                    cursorEndX, (cursorEndTop + cursorEndBottom) / 2f
+                )
+            }
+        }
     }
 
 }

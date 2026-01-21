@@ -70,6 +70,9 @@ class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.C
     }
 
     override fun onRemoveFromParent(parent: ViewGroup) {
+        if (hasSelection()) {
+            parentTextSelector?.postInvalidate()
+        }
         parentTextSelector = null
         super.onRemoveFromParent(parent)
     }
@@ -177,6 +180,9 @@ class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.C
         val newTextDrawer = tryReMeasureTextLayout(textShadow, layoutParams)
         if (newTextDrawer != textDrawer) {
             textDrawer?.setCallback(null)
+            if (hasSelection()) {
+                parentTextSelector?.postInvalidate()
+            }
             newTextDrawer?.setCallback(this)
             textDrawer = newTextDrawer
         }
