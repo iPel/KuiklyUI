@@ -8,6 +8,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -115,7 +116,12 @@ internal class KRTextSelector(
                 ) {
                     return typedValue.data
                 } else if (typedValue.resourceId != 0) {
-                    return context.getColor(typedValue.resourceId)
+                    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        context.getColor(typedValue.resourceId)
+                    } else {
+                        @Suppress("DEPRECATION")
+                        context.resources.getColor(typedValue.resourceId)
+                    }
                 }
             }
             return defValue
@@ -135,7 +141,8 @@ internal class KRTextSelector(
 
     // Reusable objects to avoid allocations
     private val reusableTextViewList = ArrayList<Triple<KRRichTextView, Int, Int>>()
-    private val reusableRect = RectF()
+    private val reusableRect = Rect()
+    private val reusableRectF = RectF()
     private val reusablePath = Path()
     private val reusableIntArray = IntArray(2)
 
@@ -456,11 +463,11 @@ internal class KRTextSelector(
                         cursorEndBottom = pb + offsetY
                     }
                     logInfo { "position hit i=$i view hash=${textView.hashCode()}" }
-                    textView.getSelectionRect(reusableRect)
-                    selectionRect.left = reusableRect.left + offsetX
-                    selectionRect.top = reusableRect.top + offsetY
-                    selectionRect.right = reusableRect.right + offsetX
-                    selectionRect.bottom = reusableRect.bottom + offsetY
+                    textView.getSelectionRect(reusableRectF)
+                    selectionRect.left = reusableRectF.left + offsetX
+                    selectionRect.top = reusableRectF.top + offsetY
+                    selectionRect.right = reusableRectF.right + offsetX
+                    selectionRect.bottom = reusableRectF.bottom + offsetY
                     return true
                 }
             }
@@ -484,11 +491,11 @@ internal class KRTextSelector(
                         cursorEndTop = pt + offsetY
                         cursorEndBottom = pb + offsetY
                     }
-                    textView.getSelectionRect(reusableRect)
-                    selectionRect.left = reusableRect.left + offsetX
-                    selectionRect.top = reusableRect.top + offsetY
-                    selectionRect.right = reusableRect.right + offsetX
-                    selectionRect.bottom = reusableRect.bottom + offsetY
+                    textView.getSelectionRect(reusableRectF)
+                    selectionRect.left = reusableRectF.left + offsetX
+                    selectionRect.top = reusableRectF.top + offsetY
+                    selectionRect.right = reusableRectF.right + offsetX
+                    selectionRect.bottom = reusableRectF.bottom + offsetY
                     return true
                 }
             }
@@ -562,11 +569,11 @@ internal class KRTextSelector(
                         lastY = offsetY
                         lastView = this
                     }
-                    getSelectionRect(reusableRect)
-                    selectionLeft = minOf(selectionLeft, reusableRect.left + offsetX)
-                    selectionTop = minOf(selectionTop, reusableRect.top + offsetY)
-                    selectionRight = maxOf(selectionRight, reusableRect.right + offsetX)
-                    selectionBottom = maxOf(selectionBottom, reusableRect.bottom + offsetY)
+                    getSelectionRect(reusableRectF)
+                    selectionLeft = minOf(selectionLeft, reusableRectF.left + offsetX)
+                    selectionTop = minOf(selectionTop, reusableRectF.top + offsetY)
+                    selectionRight = maxOf(selectionRight, reusableRectF.right + offsetX)
+                    selectionBottom = maxOf(selectionBottom, reusableRectF.bottom + offsetY)
                 }
             }
         }
@@ -643,11 +650,11 @@ internal class KRTextSelector(
                     force = i == size - 1 && !foundStart // force select last if nothing found yet
                 )
                 if (hit) {
-                    textView.getSelectionRect(reusableRect)
-                    selectionLeft = minOf(selectionLeft, reusableRect.left + offsetX)
-                    selectionTop = minOf(selectionTop, reusableRect.top + offsetY)
-                    selectionRight = maxOf(selectionRight, reusableRect.right + offsetX)
-                    selectionBottom = maxOf(selectionBottom, reusableRect.bottom + offsetY)
+                    textView.getSelectionRect(reusableRectF)
+                    selectionLeft = minOf(selectionLeft, reusableRectF.left + offsetX)
+                    selectionTop = minOf(selectionTop, reusableRectF.top + offsetY)
+                    selectionRight = maxOf(selectionRight, reusableRectF.right + offsetX)
+                    selectionBottom = maxOf(selectionBottom, reusableRectF.bottom + offsetY)
                 }
                 if (!foundStart && hit) {
                     logInfo { "start hit i=$i view hash=${textView.hashCode()}" }
@@ -787,8 +794,17 @@ internal class KRTextSelector(
 
     private fun updateSelectionHandles() {
         assert(active)
-        view.getLocationInWindow(reusableIntArray)
-        if (draggingCursorStart()) {
+        val flag = view.getLocalVisibleRect(reusableRect)
+        val visibleStart = flag &&
+                reusableRect.contains(cursorStartX.toInt(), cursorStartBottom.toInt()) &&
+                !draggingCursorStart()
+        val visibleEnd = flag &&
+                reusableRect.contains(cursorEndX.toInt(), cursorEndBottom.toInt()) &&
+                !draggingCursorEnd()
+        if (visibleStart || visibleEnd) {
+            view.getLocationInWindow(reusableIntArray)
+        }
+        if (!visibleStart) {
             cursorStartView.hide()
         } else {
             cursorStartView.show(
@@ -796,7 +812,7 @@ internal class KRTextSelector(
                 reusableIntArray[1] + cursorStartBottom
             )
         }
-        if (draggingCursorEnd()) {
+        if (!visibleEnd) {
             cursorEndView.hide()
         } else {
             cursorEndView.show(
