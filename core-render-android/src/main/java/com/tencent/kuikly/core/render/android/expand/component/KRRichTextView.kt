@@ -25,7 +25,6 @@ import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
-import android.os.Build
 import android.text.Layout
 import android.text.Spannable
 import android.text.SpannableStringBuilder
@@ -46,7 +45,6 @@ import com.tencent.kuikly.core.render.android.const.KRExtConst
 import com.tencent.kuikly.core.render.android.const.KRViewConst
 import com.tencent.kuikly.core.render.android.css.decoration.BoxShadow
 import com.tencent.kuikly.core.render.android.css.ktx.*
-import com.tencent.kuikly.core.render.android.expand.component.KRTextSelector.Companion.findParentTextSelector
 import com.tencent.kuikly.core.render.android.expand.component.text.*
 import com.tencent.kuikly.core.render.android.export.IKuiklyRenderShadowExport
 import com.tencent.kuikly.core.render.android.export.KuiklyRenderCallback
@@ -62,19 +60,14 @@ class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.C
     private var richTextShadow: KRRichTextShadow? = null
     private var textDrawer: KRRichTextViewDrawer? = null
     private var isRichTextMode = false
-    internal var parentTextSelector: KRTextSelector? = null
+    private var parentTextSelector: KRTextSelector? = null
 
-    override fun onAddToParent(parent: ViewGroup) {
-        super.onAddToParent(parent)
-        parentTextSelector = findParentTextSelector()
-    }
-
-    override fun onRemoveFromParent(parent: ViewGroup) {
+    override fun onDetachedFromWindow() {
         if (hasSelection()) {
             parentTextSelector?.postInvalidate()
         }
         parentTextSelector = null
-        super.onRemoveFromParent(parent)
+        super.onDetachedFromWindow()
     }
 
     override val reusable: Boolean
@@ -228,56 +221,69 @@ class KRRichTextView(context: Context) : KRView(context), KRRichTextViewDrawer.C
     /**
      * set selection by one point coordinate
      */
-    fun setSelectionByCoordinate(
+    internal fun setSelectionByCoordinate(
+        textSelector: KRTextSelector,
         x: Float,
         y: Float,
         type: SelectionType,
         force: Boolean = false
     ): Boolean {
-        return textDrawer?.setSelectionByCoordinate(x, y, type, force) ?: false
+        val hasSelection = textDrawer?.setSelectionByCoordinate(x, y, type, force) ?: false
+        parentTextSelector = if (hasSelection) textSelector else null
+        return hasSelection
     }
 
     /**
      * set selection by two point coordinates
      */
-    fun setSelectionByCoordinates(
+    internal fun setSelectionByCoordinates(
+        textSelector: KRTextSelector,
         x1: Float,
         y1: Float,
         x2: Float,
         y2: Float,
-        checkStartEdge: Boolean,
-        checkEndEdge: Boolean,
         force: Boolean = false
-    ): Boolean =
-        textDrawer?.setSelectionByCoordinates(x1, y1, x2, y2, checkStartEdge, checkEndEdge, force)
-            ?: false
-
-    fun hasSelection(): Boolean = textDrawer?.hasSelection ?: false
-
-    fun clearSelection() {
-        textDrawer?.clearSelection()
+    ): Boolean {
+        val hasSelection = textDrawer?.setSelectionByCoordinates(x1, y1, x2, y2, force) ?: false
+        parentTextSelector = if (hasSelection) textSelector else null
+        return hasSelection
     }
 
-    fun getStartSelectionEdge(): SelectionEdge = textDrawer!!.getStartSelectionEdge()
+    internal fun setSelectAll(textSelector: KRTextSelector): Boolean {
+        val hasSelection = textDrawer?.setSelectAll() ?: false
+        parentTextSelector = if (hasSelection) textSelector else null
+        return hasSelection
+    }
 
-    fun getEndSelectionEdge(): SelectionEdge = textDrawer!!.getEndSelectionEdge()
+    internal fun hasSelection(): Boolean = textDrawer?.hasSelection ?: false
 
-    fun getSelectionRect(dest: RectF): Boolean = textDrawer?.getSelectionRect(dest) ?: false
+    internal fun clearSelection() {
+        textDrawer?.clearSelection()
+        parentTextSelector = null
+    }
+
+    internal fun getStartSelectionEdge(): SelectionEdge = textDrawer!!.getStartSelectionEdge()
+
+    internal fun getEndSelectionEdge(): SelectionEdge = textDrawer!!.getEndSelectionEdge()
+
+    internal fun getSelectionRect(dest: RectF): Boolean =
+        textDrawer?.getSelectionRect(dest) ?: false
 
     /**
      * get selection path
      *
      * @return weather has selection
      */
-    fun getSelectionPath(dest: Path): Boolean = textDrawer?.getSelectionPath(dest) ?: false
+    internal fun getSelectionPath(dest: Path): Boolean =
+        textDrawer?.getSelectionPath(dest) ?: false
 
-    fun getSelectionText(): String = textDrawer?.getSelectionText() ?: ""
+    internal fun getSelectionText(): String = textDrawer?.getSelectionText() ?: ""
 
-    fun getPreSelectionText(): String = textDrawer?.getPreSelectionText() ?: ""
+    internal fun getPreSelectionText(): String = textDrawer?.getPreSelectionText() ?: ""
 
-    fun getPostSelectionText(): String = textDrawer?.getPostSelectionText() ?: ""
+    internal fun getPostSelectionText(): String = textDrawer?.getPostSelectionText() ?: ""
 
-    fun getText(): String = textDrawer?.textLayout?.text?.toString() ?: ""
+    internal fun getText(): String = textDrawer?.textLayout?.text?.toString() ?: ""
 
     companion object {
         const val VIEW_NAME = "KRRichTextView"

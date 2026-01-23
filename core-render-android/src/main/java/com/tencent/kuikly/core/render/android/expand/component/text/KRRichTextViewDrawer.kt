@@ -79,11 +79,7 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
         val layout = textLayout
         val size = layout.text.length
         if (size > 0) {
-            val position = layout.getOffsetForPosition(
-                x, y,
-                checkStartEdge = !force,
-                checkEndEdge = !force
-            )
+            val position = layout.getOffsetForPosition(x, y)
             if (0 <= position && position <= size) {
                 val (start, end) = when (type) {
                     SelectionType.CHARACTER -> layout.expandSelectionToCharacter(position, x, y)
@@ -107,39 +103,46 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
         y1: Float,
         x2: Float,
         y2: Float,
-        checkStartEdge: Boolean,
-        checkEndEdge: Boolean,
         force: Boolean
     ): Boolean {
         val layout = textLayout
-            var pos1: Int
-            var pos2: Int
-            val size = layout.text.length
-            if (size == 0) {
-                pos1 = INVALID_OFFSET
-                pos2 = INVALID_OFFSET
-            } else {
-                pos1 = layout.getOffsetForPosition(x1, y1, checkStartEdge, checkEndEdge)
-                pos2 = layout.getOffsetForPosition(x2, y2, checkStartEdge, checkEndEdge)
-                if (pos1 == pos2) {
-                    if (force) {
-                        if (layout.shouldExpandSelectionBackward(x1, y1, x2, y2, pos2)) {
-                            pos1 = layout.prevOffset(pos2)
-                        } else {
-                            pos2 = layout.nextOffset(pos1)
-                        }
+        var pos1: Int
+        var pos2: Int
+        val size = layout.text.length
+        if (size == 0) {
+            pos1 = INVALID_OFFSET
+            pos2 = INVALID_OFFSET
+        } else {
+            pos1 = layout.getOffsetForPosition(x1, y1)
+            pos2 = layout.getOffsetForPosition(x2, y2)
+            if (pos1 == pos2) {
+                if (force) {
+                    if (layout.shouldExpandSelectionBackward(x1, y1, x2, y2, pos2)) {
+                        pos1 = layout.prevOffset(pos2)
                     } else {
-                        pos1 = INVALID_OFFSET
-                        pos2 = INVALID_OFFSET
+                        pos2 = layout.nextOffset(pos1)
                     }
-                } else if (pos1 > pos2) {
-                    val temp = pos1
-                    pos1 = pos2
-                    pos2 = temp
+                } else {
+                    pos1 = INVALID_OFFSET
+                    pos2 = INVALID_OFFSET
                 }
+            } else if (pos1 > pos2) {
+                val temp = pos1
+                pos1 = pos2
+                pos2 = temp
             }
-            setTextSelection(pos1, pos2)
+        }
+        setTextSelection(pos1, pos2)
         return hasSelection
+    }
+
+    internal fun setSelectAll(): Boolean {
+        val size = textLayout.text.length
+        if (size > 0) {
+            setTextSelection(0, size)
+            return true
+        }
+        return false
     }
 
     internal fun clearSelection() {
@@ -399,19 +402,8 @@ class KRRichTextViewDrawer(val textLayout: Layout) {
 
         private inline fun Layout.prevOffset(offset: Int) = getUnitStart(offset - 1)
 
-        private fun Layout.getOffsetForPosition(
-            x: Float,
-            y: Float,
-            checkStartEdge: Boolean,
-            checkEndEdge: Boolean
-        ): Int {
+        private fun Layout.getOffsetForPosition(x: Float, y: Float): Int {
             val line: Int = getLineForVertical(y.toInt())
-            if (checkStartEdge && line == 0 && y < getLineTop(0)) {
-                return 0
-            }
-            if (checkEndEdge && line == lineCount - 1 && y > getLineBottom(line)) {
-                return text.length
-            }
             if ((x > width && getParagraphDirection(line) == Layout.DIR_LEFT_TO_RIGHT) ||
                 (x < 0 && getParagraphDirection(line) == Layout.DIR_RIGHT_TO_LEFT)) {
                 return getLineEnd(line)
