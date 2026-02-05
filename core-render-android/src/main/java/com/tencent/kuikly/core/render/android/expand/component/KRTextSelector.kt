@@ -855,6 +855,9 @@ internal class KRTextSelector(
     private fun updateSelectionHandles() {
         assert(active)
         val flag = view.getLocalVisibleRect(reusableRect)
+        if (flag) {
+            reusableRect.inset(-1, -1) // include edge
+        }
         val visibleStart = flag &&
                 reusableRect.contains(cursorStartX.toInt(), cursorStartBottom.toInt()) &&
                 !draggingCursorStart()
