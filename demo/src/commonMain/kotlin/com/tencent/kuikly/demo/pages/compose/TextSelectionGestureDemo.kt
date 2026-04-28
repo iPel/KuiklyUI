@@ -39,11 +39,11 @@ import com.tencent.kuikly.compose.ui.geometry.Offset
 import com.tencent.kuikly.compose.ui.unit.IntOffset
 import com.tencent.kuikly.compose.ui.unit.dp
 import com.tencent.kuikly.compose.ui.unit.sp
-import com.tencent.kuikly.compose_dsl.kuikly.text.DisableSelection
-import com.tencent.kuikly.compose_dsl.kuikly.text.SelectionContainer
-import com.tencent.kuikly.compose_dsl.kuikly.text.SelectionFrame
-import com.tencent.kuikly.compose_dsl.kuikly.text.TextSelectionType
-import com.tencent.kuikly.compose_dsl.kuikly.text.rememberSelectionContainerState
+import com.tencent.kuikly.compose.text.DisableSelection
+import com.tencent.kuikly.compose.text.SelectionContainer
+import com.tencent.kuikly.compose.text.SelectionFrame
+import com.tencent.kuikly.compose.text.TextSelectionType
+import com.tencent.kuikly.compose.text.rememberSelectionContainerState
 import com.tencent.kuikly.core.annotations.Page
 import com.tencent.kuikly.core.log.KLog
 

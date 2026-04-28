@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-package com.tencent.kuikly.compose_dsl.kuikly.text
+package com.tencent.kuikly.compose.text
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -29,9 +29,9 @@ import com.tencent.kuikly.compose.ui.Modifier
 import com.tencent.kuikly.compose.ui.graphics.Color
 import com.tencent.kuikly.compose.ui.platform.LocalDensity
 import com.tencent.kuikly.compose.ui.unit.Density
-import com.tencent.kuikly.compose_dsl.kuikly.extension.nativeRef
-import com.tencent.kuikly.compose_dsl.kuikly.extension.setEvent
-import com.tencent.kuikly.compose_dsl.kuikly.extension.setProp
+import com.tencent.kuikly.compose.extension.nativeRef
+import com.tencent.kuikly.compose.extension.setEvent
+import com.tencent.kuikly.compose.extension.setProp
 import com.tencent.kuikly.core.layout.Frame
 import com.tencent.kuikly.core.nvi.serialization.json.JSONObject
 import com.tencent.kuikly.core.views.DivView
