@@ -56,7 +56,7 @@ import kotlin.math.roundToInt
 class KRRichTextView(context: Context) : KRView(context) {
 
     private var richTextShadow: KRRichTextShadow? = null
-    private var textLayout: Layout? = null
+    private var textDrawer: KRRichTextViewDrawer? = null
     private var isRichTextMode = false
 
     override val reusable: Boolean
@@ -79,7 +79,7 @@ class KRRichTextView(context: Context) : KRView(context) {
     override fun resetShadow() {
         super.resetShadow()
         richTextShadow = null
-        textLayout = null
+        textDrawer = null
         isRichTextMode = false
     }
 
@@ -103,7 +103,7 @@ class KRRichTextView(context: Context) : KRView(context) {
     }
 
     private fun drawText(canvas: Canvas) {
-       textLayout?.also {
+        textDrawer?.also {
             canvas.save()
             canvas.translate(paddingLeft.toFloat(), paddingTop.toFloat())
             it.draw(canvas)
@@ -133,6 +133,7 @@ class KRRichTextView(context: Context) : KRView(context) {
 
         // 2. 计算spanIndex
         var spanIndex = -1
+        val textLayout = textDrawer?.textLayout
         val line = textLayout?.getLineForVertical(y) ?: 0
         val lineLeft: Float = textLayout?.getLineLeft(line) ?: Float.MIN_VALUE
         val lineRight: Float = textLayout?.getLineRight(line) ?: Float.MAX_VALUE
@@ -157,16 +158,16 @@ class KRRichTextView(context: Context) : KRView(context) {
 
     private fun initTextLayout(richTextShadow: KRRichTextShadow?) {
         val textShadow = richTextShadow ?: return
-        textLayout = tryReMeasureTextLayout(textShadow, layoutParams)
+        textDrawer = tryReMeasureTextLayout(textShadow, layoutParams)
     }
 
-    private fun tryReMeasureTextLayout(textShadow: KRRichTextShadow, layoutParams: ViewGroup.LayoutParams?): Layout? {
-        val lp = layoutParams ?: return textShadow.textLayout
+    private fun tryReMeasureTextLayout(textShadow: KRRichTextShadow, layoutParams: ViewGroup.LayoutParams?): KRRichTextViewDrawer? {
+        val lp = layoutParams ?: return textShadow.textDrawer
 
         if (needReMeasureTextLayout(lp, textShadow)) {
             textShadow.measureLayoutExactly(SizeF(lp.width.toFloat(), lp.height.toFloat()))
         }
-        return textShadow.textLayout
+        return textShadow.textDrawer
     }
 
     /**
@@ -179,7 +180,7 @@ class KRRichTextView(context: Context) : KRView(context) {
         layoutParams: ViewGroup.LayoutParams,
         textShadow: KRRichTextShadow
     ): Boolean {
-        val textLayout = textShadow.textLayout
+        val textLayout = textShadow.textDrawer?.textLayout
         if (textLayout == null || layoutParamsNotHasSize(layoutParams)) {
             return false
         }
@@ -397,9 +398,9 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
     private var textProps = KRTextProps(null)
 
     /**
-     * 文本Layout, 目前实现为StaticLayout
+     * 文本绘制器，封装了文本的 Layout（目前实现为 StaticLayout）
      */
-    var textLayout: Layout? = null
+    internal var textDrawer: KRRichTextViewDrawer? = null
 
     /**
      * 是否是富文本形式
@@ -466,7 +467,7 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
      */
     private fun getPlaceholderSpanRect(index: Int) : Rect {
         var rect = Rect(0, 0, 0, 0)
-        textLayout?.let { layout ->
+        textDrawer?.textLayout?.let { layout ->
             var phSpanTextRange: SpanTextRange? = spanTextRanges.find { it.index == index }
 
             if (phSpanTextRange != null) {
@@ -518,7 +519,7 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
 
     override fun calculateRenderViewSize(constraintSize: SizeF): SizeF {
         val layout = buildLayout(constraintSize, TextMeasureMode.AT_MOST)
-        textLayout = layout
+        textDrawer = layout?.let { KRRichTextViewDrawer(it) }
         return if (layout == null) {
             SizeF(0f, 0f)
         } else {
@@ -531,7 +532,7 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
      * @param constraintSize 指定的文本大小
      */
     fun measureLayoutExactly(constraintSize: SizeF) {
-        textLayout = buildLayout(constraintSize, TextMeasureMode.EXACTLY)
+        textDrawer = buildLayout(constraintSize, TextMeasureMode.EXACTLY)?.let { KRRichTextViewDrawer(it) }
     }
 
     private fun buildLayout(constraintSize: SizeF, measureMode: TextMeasureMode): Layout? {
@@ -622,7 +623,7 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
         val newSpanTextRanges = mutableListOf<SpanTextRange>()
         val richTextBuilder = KRRichTextBuilder(kuiklyRenderContext)
         val result = richTextBuilder.build(textProps, newSpanTextRanges) {
-            val layout = textLayout
+            val layout = textDrawer?.textLayout
             if (layout == null) {
                 SizeF(0f, 0f)
             } else {
@@ -748,7 +749,7 @@ class KRRichTextShadow : IKuiklyRenderShadowExport, IKuiklyRenderContextWrapper 
 
     private fun createLinearGradientForegroundSpan(backgroundImage: String): LinearGradientForegroundSpan {
         return LinearGradientForegroundSpan(backgroundImage) {
-            val layout = textLayout
+            val layout = textDrawer?.textLayout
             if (layout == null) {
                 SizeF(0f, 0f)
             } else {
