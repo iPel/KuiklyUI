@@ -282,7 +282,16 @@ KRAnyValue KRRenderCore::PerformNativeCallback(const KuiklyRenderNativeMethod &m
     }
 
     case KuiklyRenderNativeMethod::KuiklyRenderNativeMethodSetRenderViewFrame: {
-        auto rect = KRRect(arg2->toFloat(), arg3->toFloat(), arg4->toFloat(), arg5->toFloat());
+        // 在 frame 入口处统一按像素取整：
+        // vp -> px 四舍五入 -> vp，保证相邻节点边界落在同一物理像素，避免接缝/重叠。
+        // 下游属性流直接使用已取整的 vp 值，无需再分散处理。
+        const auto &config = context_->Config();
+        auto alignToPixel = [&config](float vp) {
+            constexpr float kRoundScaleValue = 0.5f;
+            return config->Px2Vp(static_cast<float>(static_cast<int>(config->vp2px(vp) + kRoundScaleValue)));
+        };
+        auto rect = KRRect(alignToPixel(arg2->toFloat()), alignToPixel(arg3->toFloat()), alignToPixel(arg4->toFloat()),
+                           alignToPixel(arg5->toFloat()));
         std::string rectData((const char *)&rect, sizeof(KRRect));
         auto value = KRRenderValue::Make(rectData);
         renderLayerHandler_->SetProp(arg1->toInt(), "frame", value);

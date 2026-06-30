@@ -17,16 +17,16 @@ package com.tencent.kuikly.core.render.android.expand.component.list
 
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
-import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.util.SparseArray
 import android.view.MotionEvent
 import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.animation.DecelerateInterpolator
-import com.tencent.kuikly.core.render.android.css.ktx.toNumberFloat
 import com.tencent.kuikly.core.render.android.css.ktx.toPxF
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /**
  * List边缘滚动回弹效果处理类
@@ -254,14 +254,8 @@ internal class OverScrollHandler(
             contentView.translationY
         } else {
             contentView.translationX
-        }
-        val propertyName = if (isVertical) {
-            View.TRANSLATION_Y
-        } else {
-            View.TRANSLATION_X
-        }
-
-        val animator = ObjectAnimator.ofFloat(contentView, propertyName, startOffset, finalOffset)
+        }.roundToInt().toFloat()
+        val animator = ValueAnimator.ofFloat(startOffset, finalOffset)
         animator.interpolator = DecelerateInterpolator()
         animator.duration = BOUND_BACK_DURATION
         animator.addListener(object : AnimatorListenerAdapter() {
@@ -282,7 +276,13 @@ internal class OverScrollHandler(
 
         })
         animator.addUpdateListener {
-            fireOverScrollAnimationCallback(it.animatedValue.toNumberFloat())
+            val pixelAlignedValue = (it.animatedValue as Float).roundToInt().toFloat()
+            if (isVertical) {
+                contentView.translationY = pixelAlignedValue
+            } else {
+                contentView.translationX = pixelAlignedValue
+            }
+            fireOverScrollAnimationCallback(pixelAlignedValue)
         }
         animator.start()
     }
@@ -308,21 +308,23 @@ internal class OverScrollHandler(
     private fun getFinalOffset(viewContentInset: KRRecyclerContentViewContentInset?): Float {
         val ci = viewContentInset ?: contentInsetWhenEndDrag
         val contentInset = ci ?: return 0f
-        return if (isVertical) {
+        val rawOffset = if (isVertical) {
             contentInset.top
         } else {
             contentInset.left
         }
+        return rawOffset.roundToInt().toFloat()
     }
 
     private fun setFinalTranslation(viewContentInset: KRRecyclerContentViewContentInset) {
         val finalOffset = getFinalOffset(viewContentInset)
+        val pixelAlignedOffset = finalOffset.roundToInt().toFloat()
         if (isVertical) {
-            contentView.translationY = finalOffset
+            contentView.translationY = pixelAlignedOffset
         } else {
-            contentView.translationX = finalOffset
+            contentView.translationX = pixelAlignedOffset
         }
-        fireOverScrollAnimationCallback(finalOffset)
+        fireOverScrollAnimationCallback(pixelAlignedOffset)
     }
 
     private fun fireBeginOverScrollCallback() {
@@ -392,9 +394,9 @@ internal class OverScrollHandler(
 
     private fun setTranslation(offset: Float) {
         if (isVertical) {
-            contentView.translationY += offset
+            contentView.translationY = (contentView.translationY + offset).roundToInt().toFloat()
         } else {
-            contentView.translationX += offset
+            contentView.translationX = (contentView.translationX + offset).roundToInt().toFloat()
         }
     }
 
