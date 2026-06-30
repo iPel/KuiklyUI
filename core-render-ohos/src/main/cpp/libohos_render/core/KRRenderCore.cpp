@@ -15,6 +15,7 @@
 
 #include "libohos_render/core/KRRenderCore.h"
 
+#include <cmath>
 #include <functional>
 #include <memory>
 #include "libohos_render/foundation/KRRect.h"
@@ -283,15 +284,21 @@ KRAnyValue KRRenderCore::PerformNativeCallback(const KuiklyRenderNativeMethod &m
 
     case KuiklyRenderNativeMethod::KuiklyRenderNativeMethodSetRenderViewFrame: {
         // 在 frame 入口处统一按像素取整：
-        // vp -> px 四舍五入 -> vp，保证相邻节点边界落在同一物理像素，避免接缝/重叠。
-        // 下游属性流直接使用已取整的 vp 值，无需再分散处理。
+        // 把 frame 视为 [left, top, right, bottom] 四条边界，分别将其 vp -> px 后用 std::round
+        // 取到最近的整数像素，再换算回 vp；width/height 由对齐后的边界相减得到。
+        // 这样可保证：
+        //   1) 相邻节点（前一个的 right == 后一个的 left）对齐到同一物理像素，避免接缝/重叠；
+        //   2) std::round 对负数也按"远离 0"四舍五入，行为与正数一致；
+        //   3) 下游属性流直接使用已取整的 vp 值，无需再分散处理。
         const auto &config = context_->Config();
-        auto alignToPixel = [&config](float vp) {
-            constexpr float kRoundScaleValue = 0.5f;
-            return config->Px2Vp(static_cast<float>(static_cast<int>(config->vp2px(vp) + kRoundScaleValue)));
+        auto alignEdgeToPixel = [&config](float vp) {
+            return config->Px2Vp(std::round(config->vp2px(vp)));
         };
-        auto rect = KRRect(alignToPixel(arg2->toFloat()), alignToPixel(arg3->toFloat()), alignToPixel(arg4->toFloat()),
-                           alignToPixel(arg5->toFloat()));
+        const float left = alignEdgeToPixel(arg2->toFloat());
+        const float top = alignEdgeToPixel(arg3->toFloat());
+        const float right = alignEdgeToPixel(arg2->toFloat() + arg4->toFloat());
+        const float bottom = alignEdgeToPixel(arg3->toFloat() + arg5->toFloat());
+        auto rect = KRRect(left, top, right - left, bottom - top);
         std::string rectData((const char *)&rect, sizeof(KRRect));
         auto value = KRRenderValue::Make(rectData);
         renderLayerHandler_->SetProp(arg1->toInt(), "frame", value);
