@@ -32,7 +32,8 @@ export class KRMyDemoCustomView extends KuiklyRenderBaseView {
   slot: NodeContent | null = new NodeContent()
 
   call(method: string, params: KRAny, callback: KuiklyRenderCallback | null): void {
-    throw new Error('Method not implemented.');
+    // 未识别的 method 交给基类（含 accessibilityAnnounce / accessibilityFocus 支持）。
+    super.call(method, params, callback);
   }
 
   createArkUIView(): ComponentContent<KuiklyRenderBaseView> {
@@ -63,6 +64,7 @@ export class KRMyDemoCustomView extends KuiklyRenderBaseView {
         }
         return true
       default:
+        // 基类会处理 backgroundColor / backgroundImage / accessibility*，未识别返回 false。
         return super.setProp(propKey, propValue);
     }
   }
@@ -85,6 +87,8 @@ export struct KRMyDemoCustomViewComponent {
           .width('100%')
           .height('50%')
           .textAlign(TextAlign.Center).align(Alignment.End)
+          // 阻止子节点抢焦点，使外层 Stack 的 accessibilityText 生效。
+          .accessibilityLevel('no')
 
         Button("Tap Me").onClick(()=>{
           if(this.renderView.onMyViewTapped){
@@ -93,6 +97,8 @@ export struct KRMyDemoCustomViewComponent {
         })
           .width('100%')
           .height('50%')
+          // 同理阻止子 Button 抢焦点；如果业务上确需 Button 单独可聚焦，可去掉此行。
+          .accessibilityLevel('no')
       }
       .justifyContent(FlexAlign.Center)
 
@@ -103,7 +109,16 @@ export struct KRMyDemoCustomViewComponent {
     .size({width:this.renderView.width, height: this.renderView.height})
     .alignSelf(ItemAlign.Start)
     .border({color: Color.Black, width: 2})
-    .id("KRMyDemoCustomView")
+    // 无障碍接入模板（业务方参考）：
+    // .id() 提供 customId 供 accessibilityFocus 定位；
+    // .accessibilityText() 应用 kuikly `accessibility` 属性；
+    // .accessibilityLevel('yes') 显式声明可被无障碍服务识别；
+    // .accessibilityGroup(true) 把整个 Stack 作为一个整体聚焦单位，避免子节点各自聚焦。
+    .id(this.renderView.getNodeId() || 'KRMyDemoCustomView')
+    .accessibilityText(this.renderView.cssAccessibilityText ?? '')
+    .accessibilityRole(this.renderView.resolveArkUIAccessibilityRole())
+    .accessibilityLevel(this.renderView.cssAccessibilityRole === 'none' ? 'no' : 'yes')
+    .accessibilityGroup(true)
   }
 }
 
