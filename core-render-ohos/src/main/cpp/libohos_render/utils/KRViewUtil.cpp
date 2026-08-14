@@ -518,8 +518,9 @@ void UpdateNodeAccessibilityRole(ArkUI_NodeHandle node, const std::string &roleS
         ArkUI_NumberValue val[] = {{.i32 = ARKUI_ACCESSIBILITY_MODE_DISABLED}};
         ArkUI_AttributeItem item = {val, 1};
         nodeAPI->setAttribute(node, NODE_ACCESSIBILITY_MODE, &item);
-        // 同时清掉可能残留的 role，避免叠加。
+        // 同时清掉可能残留的 role 与 group，避免叠加。
         nodeAPI->resetAttribute(node, NODE_ACCESSIBILITY_ROLE);
+        nodeAPI->resetAttribute(node, NODE_ACCESSIBILITY_GROUP);
         return;
     }
     // 常规角色映射：NODE_ACCESSIBILITY_ROLE 的 value 类型是 ArkUI_NodeType。
@@ -543,6 +544,7 @@ void UpdateNodeAccessibilityRole(ArkUI_NodeHandle node, const std::string &roleS
         // 未知 role 一律重置为默认。
         nodeAPI->resetAttribute(node, NODE_ACCESSIBILITY_ROLE);
         nodeAPI->resetAttribute(node, NODE_ACCESSIBILITY_MODE);
+        nodeAPI->resetAttribute(node, NODE_ACCESSIBILITY_GROUP);
         return;
     }
     // 切换到常规 role 时，把 MODE 恢复默认，避免上一次 none 的 DISABLED 残留。
@@ -550,6 +552,13 @@ void UpdateNodeAccessibilityRole(ArkUI_NodeHandle node, const std::string &roleS
     ArkUI_NumberValue val[] = {{.u32 = nodeType}};
     ArkUI_AttributeItem item = {val, 1};
     nodeAPI->setAttribute(node, NODE_ACCESSIBILITY_ROLE, &item);
+    // 设了具体 role 即代表"整个节点是一个语义单元"，把子节点吞进来一起聚焦。
+    // 与 ArkTS 转发组件在 build() 里应用 `.accessibilityGroup(cssAccessibilityRole != null && !== 'none')`
+    // 的行为对齐；三端语义上等价 Android `setClassName(Button.class.getName())`（子节点默认不再单独播报）、
+    // iOS `.button` trait + `isAccessibilityElement = YES`（聚焦到本节点，子节点被吞）。
+    ArkUI_NumberValue groupVal[] = {{.i32 = 1}};
+    ArkUI_AttributeItem groupItem = {groupVal, 1};
+    nodeAPI->setAttribute(node, NODE_ACCESSIBILITY_GROUP, &groupItem);
 }
 
 // 从资源管理器读取无障碍提示字符串。进程级缓存：不同 res_mgr 指针共享同一 locale，

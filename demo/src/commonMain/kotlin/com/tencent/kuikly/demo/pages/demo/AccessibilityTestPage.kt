@@ -335,14 +335,18 @@ internal class AccessibilityTestPage : BasePager() {
                 }
 
                 caseCard(
-                    title = "B8 · ArkTS 组件 role=BUTTON",
-                    expect = "读屏应把 ArkTS 组件的角色识别为 \"按钮\"（依赖业务方 @Component 已根据 cssAccessibilityRole 应用修饰器）",
+                    title = "B8 · ArkTS 组件 role=BUTTON（API < 18 时 role 不生效）",
+                    expect = "本项目 compatibleSdkVersion=5.0.0(12)，ArkTS `.accessibilityRole()` 修饰器要求 API 18+，不启用。\n" +
+                        "读屏预期播报 accessibility 文案\"我是ArkTS按钮\"，但**不会**额外播报\"按钮\"角色提示。\n" +
+                        "如需 role 语义，业务方应直接把词写进 accessibility 文案，如 accessibility(\"我是提交按钮\")。",
                 ) {
                     MyDemoCustom {
                         attr {
                             size(width = 260f, height = 80f)
                             backgroundColor(Color.YELLOW)
                             message("B8")
+                            // accessibilityRole(BUTTON) 在 ArkTS 转发组件上暂不生效（API 18+ 才支持）；
+                            // 保留调用不影响运行，仅 CAPI 组件路径下会真正写 NODE_ACCESSIBILITY_ROLE。
                             accessibility("我是ArkTS按钮")
                             accessibilityRole(AccessibilityRole.BUTTON)
                         }

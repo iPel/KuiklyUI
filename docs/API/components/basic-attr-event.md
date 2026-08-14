@@ -790,9 +790,9 @@ internal class OverflowPage : BasePager() {
 | `SEARCH` | `EditText::class.java.name` | `.searchField` trait | `ARKUI_NODE_TEXT_INPUT`（降级）|
 | `NONE` | `IMPORTANT_FOR_ACCESSIBILITY_NO` | `.accessibilityElement = false` | `ARKUI_ACCESSIBILITY_MODE_DISABLED` |
 
-> **鸿蒙降级说明**：`ArkUI_NodeType` 枚举没有 SEARCH 类型，故降级到 `TEXT_INPUT`（可编辑单行文本），与 Android `EditText` 语义等价。`NONE` 走 `NODE_ACCESSIBILITY_MODE` 通道剔除出无障碍树，等价于 Android `IMPORTANT_FOR_ACCESSIBILITY_NO`。
+> **鸿蒙 ArkTS 转发组件限制**：ArkTS 转发组件不支持此属性，无法读出具体角色词（"按钮"/"复选框"等），可在 kotlin 侧把角色词直接嵌入 `accessibility` 文案（如 `accessibility("提交按钮")`）作为语义补偿。详见 [鸿蒙自定义 ArkTS 组件无障碍接入指南](../../DevGuide/ohos-custom-accessibility.md)。
 >
-> **`NONE` 的作用范围（三端一致）**：`NONE` 仅将本节点从无障碍树中剔除，**不会递归到子节点**——子节点仍会独立参与朗读焦点判定。若需要让"整棵子树"都不被朗读，需对可能被聚焦的子节点也显式设置 `accessibilityRole(NONE)`（或在鸿蒙自定义 ArkTS 组件中对子节点应用 `.accessibilityLevel('no')`）。这一行为对齐各端底层 API：Android `IMPORTANT_FOR_ACCESSIBILITY_NO`（对应的"整棵子树剔除"是 `IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS`，Kuikly 未映射）、iOS `isAccessibilityElement = false`（`accessibilityElementsHidden` 才递归）、HarmonyOS `ARKUI_ACCESSIBILITY_MODE_DISABLED`（`_DISABLED_FOR_DESCENDANTS` 才递归）。
+> **`NONE` 的作用范围（三端一致）**：`NONE` 仅将本节点从无障碍树中剔除，**不会递归到子节点**——子节点仍会独立参与朗读焦点判定。若需要让"整棵子树"都不被朗读，需对可能被聚焦的子节点也显式设置 `accessibilityRole(NONE)`。
 
 ### accessibilityInfo方法
 

@@ -87,7 +87,7 @@ export struct KRMyDemoCustomViewComponent {
           .width('100%')
           .height('50%')
           .textAlign(TextAlign.Center).align(Alignment.End)
-          // 阻止子节点抢焦点，使外层 Stack 的 accessibilityText 生效。
+          // 纯展示子节点让出焦点，避免抢占外层 accessibilityText。
           .accessibilityLevel('no')
 
         Button("Tap Me").onClick(()=>{
@@ -97,8 +97,6 @@ export struct KRMyDemoCustomViewComponent {
         })
           .width('100%')
           .height('50%')
-          // 同理阻止子 Button 抢焦点；如果业务上确需 Button 单独可聚焦，可去掉此行。
-          .accessibilityLevel('no')
       }
       .justifyContent(FlexAlign.Center)
 
@@ -110,15 +108,15 @@ export struct KRMyDemoCustomViewComponent {
     .alignSelf(ItemAlign.Start)
     .border({color: Color.Black, width: 2})
     // 无障碍接入模板（业务方参考）：
-    // .id() 提供 customId 供 accessibilityFocus 定位；
-    // .accessibilityText() 应用 kuikly `accessibility` 属性；
-    // .accessibilityLevel('yes') 显式声明可被无障碍服务识别；
-    // .accessibilityGroup(true) 把整个 Stack 作为一个整体聚焦单位，避免子节点各自聚焦。
-    .id(this.renderView.getNodeId() || 'KRMyDemoCustomView')
+    // .id()：提供 customId 供 accessibilityFocus 定位（缺失会导致 focus 静默失效）
+    .id(this.renderView.getNodeId())
+    // .accessibilityText()：应用 kuikly `accessibility` 属性
     .accessibilityText(this.renderView.cssAccessibilityText ?? '')
-    .accessibilityRole(this.renderView.resolveArkUIAccessibilityRole())
-    .accessibilityLevel(this.renderView.cssAccessibilityRole === 'none' ? 'no' : 'yes')
-    .accessibilityGroup(true)
+    // .accessibilityGroup()：使用者调 accessibilityRole(非 NONE) 时，把组件聚合为一个焦点单元；
+    .accessibilityGroup(this.renderView.cssAccessibilityRole != null
+      && this.renderView.cssAccessibilityRole !== 'none')
+    // .accessibilityLevel()：role=none 时让外层退出无障碍树；其余用默认 'auto'
+    .accessibilityLevel(this.renderView.cssAccessibilityRole === 'none' ? 'no' : 'auto')
   }
 }
 

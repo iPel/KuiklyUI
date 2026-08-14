@@ -273,9 +273,11 @@ bool KRBasePropsHandler::ResetProp(const std::string &prop_key) {
     }
 
     if (strcmp(prop_key.c_str(), kAccessibilityRole) == 0) {  // 无障碍角色
-        // 同时重置 ROLE 与 MODE，涵盖 none 情形（MODE=DISABLED 需回默认）。
+        // 同时重置 ROLE、MODE、GROUP，涵盖 none 情形（MODE=DISABLED 需回默认）与
+        // 常规角色情形（SetProp 会写 GROUP=1，reset 时若不清 GROUP，聚合语义会残留）。
         kuikly::util::GetNodeApi()->resetAttribute(node_, NODE_ACCESSIBILITY_ROLE);
         kuikly::util::GetNodeApi()->resetAttribute(node_, NODE_ACCESSIBILITY_MODE);
+        kuikly::util::GetNodeApi()->resetAttribute(node_, NODE_ACCESSIBILITY_GROUP);
         return true;
     }
 

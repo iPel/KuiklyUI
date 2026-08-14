@@ -59,30 +59,6 @@ export abstract class KuiklyRenderBaseView implements IKuiklyRenderViewExport {
   cssAccessibilityInfo: string | null = null;
   nodeId: string = '';
 
-  /**
-   * 将 kuikly `accessibilityRole` 的字符串值翻译为 ArkUI `AccessibilityRoleType` 枚举。
-   * 业务方在 @Component build() 里可直接：
-   *   .accessibilityRole(this.renderView.resolveArkUIAccessibilityRole())
-   * 未识别或未设置时返回 `AccessibilityRoleType.ROLE_NONE`（等价"不特化"）。
-   */
-  resolveArkUIAccessibilityRole(): AccessibilityRoleType {
-    switch (this.cssAccessibilityRole) {
-      case 'button':
-        return AccessibilityRoleType.BUTTON;
-      case 'checkbox':
-        return AccessibilityRoleType.CHECKBOX;
-      case 'image':
-        return AccessibilityRoleType.IMAGE;
-      case 'search':
-        return AccessibilityRoleType.SEARCH;
-      case 'text':
-        return AccessibilityRoleType.TEXT;
-      case 'none':
-      default:
-        return AccessibilityRoleType.ROLE_NONE;
-    }
-  }
-
   getViewWidth(): number {
     return this.viewWidth;
   }

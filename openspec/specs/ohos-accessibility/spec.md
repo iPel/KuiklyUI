@@ -41,13 +41,21 @@ HarmonyOS 端 SHALL 将 kotlin `AccessibilityRole` 枚举映射为鸿蒙无障�
 | `SEARCH` | `NODE_ACCESSIBILITY_ROLE` = `ARKUI_NODE_TEXT_INPUT`（降级） |
 | `NONE` | `NODE_ACCESSIBILITY_MODE` = `ARKUI_ACCESSIBILITY_MODE_DISABLED`（不设 role） |
 
-对于 ArkTS 转发组件，`KuiklyRenderBaseView` SHALL 提供 `resolveArkUIAccessibilityRole()` 工具函数，把 `cssAccessibilityRole` 字符串翻译为 ArkUI `AccessibilityRoleType` 枚举（`BUTTON / CHECKBOX / IMAGE / SEARCH / TEXT / ROLE_NONE`），业务方在 `@Component build()` 里通过 `.accessibilityRole(this.renderView.resolveArkUIAccessibilityRole())` 一行应用。
+对于 ArkTS 转发组件，ArkUI 的 `.accessibilityRole(AccessibilityRoleType)` 修饰器要求 **API 18+**；当项目 `compatibleSdkVersion` 低于 5.1.0(18) 时，`KuiklyRenderBaseView` SHALL NOT 提供 role 翻译工具，ArkTS 转发组件的 role 语义无法通过 ArkTS 修饰器表达。业务方 SHALL 通过把角色词直接写进 `accessibility(...)` 文案（例如 `accessibility("提交按钮")`）来近似还原朗读听感。未来项目抬升 SDK 至 18+ 后可重新引入 role 翻译工具与 `.accessibilityRole()` 修饰器。
 
 #### Scenario: 常规角色映射（HarmonyOS，CAPI 内置组件）
 
 - **GIVEN** 一个 CAPI 内置组件设置 `attr { accessibilityRole(AccessibilityRole.BUTTON) }`
 - **WHEN** 用户聚焦到该组件
 - **THEN** 屏幕朗读器 SHALL 播报 "按钮" 作为角色提示
+- **AND** cpp 侧 SHALL 同时写 `NODE_ACCESSIBILITY_GROUP = 1`，让子节点被聚合、不独立播报，与 Android `setClassName(Button.class.getName())` / iOS `.button` trait + `isAccessibilityElement = YES` 的三端语义对齐
+
+#### Scenario: ArkTS 转发组件在 role != NONE 时的聚合行为（HarmonyOS）
+
+- **GIVEN** 使用者对一个 ArkTS 转发组件设置 `attr { accessibilityRole(AccessibilityRole.BUTTON); accessibility("我是按钮") }`
+- **WHEN** 组件渲染
+- **THEN** 业务方 `@Component build()` 里应用的 `.accessibilityGroup(cssAccessibilityRole != null && !== 'none')` SHALL 生效为 `true`
+- **AND** 读屏聚焦时 SHALL 播报 accessibilityText，组件内部子控件（如 Button）的原生点击手势 SHALL 被读屏拦截；使用者若需保留内部子控件独立可点，应在 kotlin 侧不设 role（或设为 NONE）
 
 #### Scenario: SEARCH 降级映射（HarmonyOS）
 
@@ -61,6 +69,7 @@ HarmonyOS 端 SHALL 将 kotlin `AccessibilityRole` 枚举映射为鸿蒙无障�
 - **GIVEN** 一个组件设置 `attr { accessibilityRole(AccessibilityRole.NONE) }`
 - **WHEN** 用户在屏幕上滑动焦点
 - **THEN** 该 CAPI 组件 SHALL 通过 `NODE_ACCESSIBILITY_MODE = ARKUI_ACCESSIBILITY_MODE_DISABLED` 被跳过；ArkTS 转发组件 SHALL 通过 `.accessibilityLevel('no')` 被跳过
+- **AND** cpp 侧 SHALL 同时 `resetAttribute(NODE_ACCESSIBILITY_GROUP)` 清除上一次常规 role 遗留的聚合标记
 - **AND** 该行为仅剔除本节点，NOT 递归到子节点；子节点仍会独立参与朗读焦点判定（三端一致，语义对齐 Android `IMPORTANT_FOR_ACCESSIBILITY_NO`、iOS `isAccessibilityElement = false`、HarmonyOS `ARKUI_ACCESSIBILITY_MODE_DISABLED`）
 
 #### Scenario: NONE ↔ 常规角色切换（HarmonyOS）
@@ -68,12 +77,15 @@ HarmonyOS 端 SHALL 将 kotlin `AccessibilityRole` 枚举映射为鸿蒙无障�
 - **GIVEN** 一个 CAPI 组件先设置 `accessibilityRole(NONE)`，后又切换为 `accessibilityRole(BUTTON)`
 - **WHEN** 属性变更下发
 - **THEN** cpp 侧 SHALL 先 `resetAttribute(NODE_ACCESSIBILITY_MODE)` 清除 DISABLED 残留，再 `setAttribute(NODE_ACCESSIBILITY_ROLE)`，保证节点重新可聚焦并播报新角色
+- **AND** cpp 侧 SHALL 在切换为常规 role 时同时写 `NODE_ACCESSIBILITY_GROUP = 1`，让节点重新表现为一个聚合的语义单元
 
-#### Scenario: ArkTS 转发组件角色映射（HarmonyOS）
+#### Scenario: ArkTS 转发组件角色语义降级（HarmonyOS，API < 18）
 
-- **GIVEN** 一个 ArkTS 转发组件设置 `attr { accessibilityRole(AccessibilityRole.BUTTON) }`，且业务方 `@Component build()` 里已应用 `.accessibilityRole(this.renderView.resolveArkUIAccessibilityRole())`
+- **GIVEN** 项目 `compatibleSdkVersion` 为 5.0.0(12)
+- **AND** 一个 ArkTS 转发组件设置 `attr { accessibilityRole(AccessibilityRole.BUTTON) }`
 - **WHEN** 用户聚焦到该组件
-- **THEN** 屏幕朗读器 SHALL 播报 "按钮" 作为角色提示
+- **THEN** ArkTS 修饰器 SHALL NOT 表达 role（`.accessibilityRole(...)` 因 API 版本限制不使用）
+- **AND** 业务方应改用 `accessibility("提交按钮")` 把"按钮"直接写入朗读文案；朗读听感与真正设置了 role 的组件基本等价
 
 
 ### Requirement: Accessibility 交互动作声明 (`accessibilityInfo` prop)
@@ -202,6 +214,11 @@ HarmonyOS 端的无障碍属性/方法实现 SHALL 同时覆盖 CAPI 内置组�
 #### Scenario: 业务方接入指南可复制粘贴
 
 - **WHEN** 业务方阅读 `docs/DevGuide/ohos-custom-accessibility.md`
-- **THEN** 文档 SHALL 提供一个完整的 `@Component build()` 代码片段作为模板，展示如何应用 `.id()` / `.accessibilityText()` / `.accessibilityRole()` / `.accessibilityLevel()` / `.accessibilityGroup()` 五件套
-- **AND** 说明为什么子节点需要 `.accessibilityLevel('no')`
-- **AND** 说明 `resolveArkUIAccessibilityRole()` 工具函数的使用方式
+- **THEN** 文档 SHALL 提供一个完整的 `@Component build()` 代码片段作为模板
+- **AND** 模板 SHALL 按以下分层组织修饰器：
+  - 必备：`.id()`（为 `accessibilityFocus` 提供 `customId`）与 `.accessibilityText()`（应用 `cssAccessibilityText`）
+  - **由使用者的 role 驱动**：`.accessibilityGroup(cssAccessibilityRole != null && cssAccessibilityRole !== 'none')`。使用者设 role（非 NONE）时把整个组件聚合为一个焦点单元，与 CAPI 侧 `role != none` 同时写 `NODE_ACCESSIBILITY_GROUP = 1` 的行为对齐
+  - 特例：仅当 `cssAccessibilityRole === 'none'` 时在外层加 `.accessibilityLevel('no')` 主动退出无障碍树，其余情况使用默认 `'auto'`
+  - 按需（仅在 group=false 时适用）：给会抢焦点、又不需要独立聚焦的**纯展示子节点**（装饰性 `Text` / `Image`）加 `.accessibilityLevel('no')`；可交互子控件（`Button` 等）绝不加，否则读屏用户无法激活
+- **AND** 说明 group=true 的副作用：读屏拦截子控件的原生 onClick；使用者若需保留内部子控件独立可点，应在 kotlin 侧不设 role（或设为 NONE），并把交互事件挂在外层
+- **AND** 说明 `.accessibilityRole(AccessibilityRoleType)` 修饰器因 API 18+ 要求暂不接入（仅影响 role 播报词），聚合语义由 `.accessibilityGroup(true)` 承担；业务方需要角色朗读词时应把词直接嵌入 `accessibility(...)` 文案
