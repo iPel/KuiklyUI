@@ -294,6 +294,7 @@ std::shared_ptr<KRContextSchedulerInternal> KRContextScheduler::GetInstance() {
     static std::once_flag flag;
     std::call_once(flag, []() {
         const bool multi = gThreadingMode == KRContextScheduler::ThreadingMode::MultiThread;
+        KR_LOG_INFO << "KRContextScheduler created threadingMode=" << (multi ? "multi" : "single");
         instance_ = multi ? std::dynamic_pointer_cast<KRContextSchedulerInternal>(
                                 std::make_shared<KRContextSchedulerMultiThreaded>())
                           : std::dynamic_pointer_cast<KRContextSchedulerInternal>(
@@ -331,7 +332,7 @@ EXTERN_C_START
  *
  * 须在 KRContextScheduler 首次创建前调用一次。不放进 Kuikly.h，不给宿主调用。
  */
-void KRSetThreadingMode(int mode) {
+KUIKLY_EXPORT void KRSetThreadingMode(int mode) {
     // 显式 mode != 0 比 !!mode 更直观；ThreadingMode 是二元枚举（MultiThread / SingleThread），
     // 这里仅做"非 0 即 SingleThread"的语义映射。
     const auto target = (mode != 0) ? KRContextScheduler::ThreadingMode::SingleThread

@@ -21,6 +21,7 @@
 #include "libohos_render/foundation/KRCommon.h"
 #include "libohos_render/scheduler/KRContextScheduler.h"
 #include "libohos_render/scheduler/KRInputFirstGate.h"
+#include "libohos_render/utils/KRRenderLoger.h"
 #include "libohos_render/utils/KRStringUtil.h"
 
 namespace kuikly {
@@ -69,6 +70,10 @@ KRAnyValue KRVsyncModule::CallMethod(bool sync, const std::string &method, KRAny
     return KREmptyValue();
 }
 
+void KRVsyncModule::WillDestroy() {
+    UnRegisterVsync();
+}
+
 void KRVsyncModule::OnDestroy() {
     UnRegisterVsync();
 }
@@ -91,14 +96,19 @@ void KRVsyncModule::RegisterVsync(const KRRenderCallback &callback) {
 }
 
 void KRVsyncModule::UnRegisterVsync() {
-    std::lock_guard<std::mutex> guard(mutex_);
-    running_ = false;
-    callback_ = nullptr;
-    // 代数递增后，在途回调因 generation 不匹配被安全丢弃
-    generation_++;
-    // 释放槽侧引用；若在途回调尚未到达，其引用减法会将计数归零并完成释放
-    ReleaseRequestRef(pending_request_);
-    pending_request_ = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        running_ = false;
+        callback_ = nullptr;
+        // 代数递增后，在途回调因 generation 不匹配被安全丢弃
+        generation_++;
+        // 释放槽侧引用；若在途回调尚未到达，其引用减法会将计数归零并完成释放
+        ReleaseRequestRef(pending_request_);
+        pending_request_ = nullptr;
+    }
+    if (KRInputFirstGate::GetInstance().HasDeferred()) {
+        KR_LOG_INFO_WITH_TAG("KRVsyncModule") << "unregister with deferred frame";
+    }
 }
 
 // 调用前须持有 mutex_
@@ -175,11 +185,14 @@ void KRVsyncModule::OnVsync(long long timestamp, void *data) {
         if (!locked) {
             return;
         }
+        bool drop = false;
         {
             std::lock_guard<std::mutex> guard(locked->mutex_);
-            if (!locked->running_ || generation != locked->generation_) {
-                return;
-            }
+            drop = !locked->running_ || generation != locked->generation_;
+        }
+        if (drop) {
+            KR_LOG_INFO_WITH_TAG("KRVsyncModule") << "drop deferred frame";
+            return;
         }
         // 注意：必须传 int32_t。KRRenderValue(int32) -> KRRenderCValue::Type::INT ->
         // Kotlin 侧 Type.INT -> value.intValue 转为 Kotlin Int；若传 int64 会变为

@@ -65,6 +65,8 @@ class KRInputFirstGate {
     void OnInputDone();
 
     bool IsInSession();
+    // 是否有还没投递的 vsync 帧任务。销毁时用来确认这次反注册碰上了暂存。
+    bool HasDeferred();
 
     /**
      * vsync 回调到达且无未消化帧任务时调用。

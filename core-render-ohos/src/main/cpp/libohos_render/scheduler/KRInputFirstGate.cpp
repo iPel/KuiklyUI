@@ -20,6 +20,7 @@
 #include <cmath>
 #include <iterator>
 
+#include "libohos_render/foundation/thread/KRThread.h"
 #include "libohos_render/scheduler/KRMainThreadTaskPuller.h"
 #include "libohos_render/utils/KRRenderLoger.h"
 
@@ -39,6 +40,18 @@ void AppendSample(std::vector<double> *samples, double value) {
     if (samples->size() < kMaxSamplesPerSession) {
         samples->push_back(value);
     }
+}
+
+const char *SessionTypeName(KRInputFirstGate::SessionType type) {
+    switch (type) {
+        case KRInputFirstGate::SessionType::kTouch:
+            return "touch";
+        case KRInputFirstGate::SessionType::kScroll:
+            return "scroll";
+        case KRInputFirstGate::SessionType::kGesture:
+            return "gesture";
+    }
+    return "unknown";
 }
 
 // 最近邻秩法分位数（q ∈ (0, 1]）；无样本返回 0。
@@ -61,6 +74,7 @@ KRInputFirstGate &KRInputFirstGate::GetInstance() {
 
 void KRInputFirstGate::BeginSession(const void *owner, SessionType type) {
     bool becameActive = false;
+    size_t active = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         becameActive = sessions_.empty();
@@ -68,8 +82,13 @@ void KRInputFirstGate::BeginSession(const void *owner, SessionType type) {
             input_idle_ = false;
         }
         sessions_.emplace(owner, type);
+        active = sessions_.size();
     }
+    KR_LOG_INFO_WITH_TAG("KRInputFirstGate")
+        << "session begin type=" << SessionTypeName(type) << " active=" << active;
     if (becameActive) {
+        KRThread::ExchangeTasksStartedWhileParked();
+        KRMainThreadTaskPuller::ExchangeMainPullTaskCount();
         KRMainThreadTaskPuller::OnSessionActiveChanged(true);
     }
 }
@@ -79,14 +98,18 @@ void KRInputFirstGate::EndSession(const void *owner, SessionType type) {
     Metrics finished;
     bool hasFinished = false;
     bool becameInactive = false;
+    size_t active = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         const bool wasActive = !sessions_.empty();
         sessions_.erase({owner, type});
         becameInactive = wasActive && sessions_.empty();
+        active = sessions_.size();
         dispatch = TakeDeferredIfOutOfSessionLocked();
         hasFinished = TakeFinishedMetricsLocked(&finished);
     }
+    KR_LOG_INFO_WITH_TAG("KRInputFirstGate")
+        << "session end type=" << SessionTypeName(type) << " active=" << active;
     if (becameInactive) {
         KRMainThreadTaskPuller::OnSessionActiveChanged(false);
     }
@@ -103,6 +126,7 @@ void KRInputFirstGate::ReleaseSessions(const void *owner) {
     Metrics finished;
     bool hasFinished = false;
     bool becameInactive = false;
+    size_t active = 0;
     {
         std::lock_guard<std::mutex> lock(mutex_);
         const bool wasActive = !sessions_.empty();
@@ -110,9 +134,12 @@ void KRInputFirstGate::ReleaseSessions(const void *owner) {
             it = (it->first == owner) ? sessions_.erase(it) : std::next(it);
         }
         becameInactive = wasActive && sessions_.empty();
+        active = sessions_.size();
         dispatch = TakeDeferredIfOutOfSessionLocked();
         hasFinished = TakeFinishedMetricsLocked(&finished);
     }
+    KR_LOG_INFO_WITH_TAG("KRInputFirstGate")
+        << "session release active=" << active;
     if (becameInactive) {
         KRMainThreadTaskPuller::OnSessionActiveChanged(false);
     }
@@ -150,6 +177,11 @@ void KRInputFirstGate::OnInputDone() {
 bool KRInputFirstGate::IsInSession() {
     std::lock_guard<std::mutex> lock(mutex_);
     return !sessions_.empty();
+}
+
+bool KRInputFirstGate::HasDeferred() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return static_cast<bool>(deferred_);
 }
 
 bool KRInputFirstGate::OnVsync(int64_t vsyncTimestampNs, std::function<void()> dispatch) {
@@ -238,5 +270,7 @@ void KRInputFirstGate::LogMetrics(const Metrics &m) {
         << " frameMerged=" << m.frame_merged
         << " inputIdleEntries=" << m.input_idle_entries
         << " pullSliceBudget=" << m.pull_stops[static_cast<size_t>(PullStop::kSliceBudget)]
-        << " pullQueueEmptyOrBusy=" << m.pull_stops[static_cast<size_t>(PullStop::kQueueEmptyOrBusy)];
+        << " pullQueueEmptyOrBusy=" << m.pull_stops[static_cast<size_t>(PullStop::kQueueEmptyOrBusy)]
+        << " contextTasksWhileParked=" << KRThread::ExchangeTasksStartedWhileParked()
+        << " mainPullTasks=" << KRMainThreadTaskPuller::ExchangeMainPullTaskCount();
 }

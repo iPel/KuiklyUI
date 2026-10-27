@@ -24,6 +24,8 @@
 
 namespace {
 
+std::atomic<uint32_t> g_tasksStartedWhileParked{0};
+
 // 一次性 timer 持有的上下文：exec 为“到点后的提交动作”，在 TimerCb 中被调用。
 struct TimerContext {
     std::function<void()> exec;
@@ -251,6 +253,9 @@ void KRThread::OnAsync() {
             auto fn = std::move(local.front());
             local.pop();
             if (fn) {
+                if (m_parked.load(std::memory_order_acquire)) {
+                    g_tasksStartedWhileParked.fetch_add(1, std::memory_order_relaxed);
+                }
                 // 任何未捕获异常都会一路冒到 std::thread 入口触发 std::terminate，
                 // 同时让 m_taskMutex / m_isExecutingTask 来不及落回干净状态——
                 // 这里不套 C++ catch，为的是让 K/N unhandled hook 能先于 std::terminate
@@ -494,4 +499,8 @@ bool KRThread::TryRunOnCurThread(std::chrono::microseconds window, const std::fu
         std::this_thread::yield();
     }
     return false;
+}
+
+uint32_t KRThread::ExchangeTasksStartedWhileParked() {
+    return g_tasksStartedWhileParked.exchange(0, std::memory_order_relaxed);
 }

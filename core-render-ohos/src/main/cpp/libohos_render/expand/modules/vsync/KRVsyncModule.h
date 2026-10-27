@@ -67,6 +67,7 @@ class KRVsyncModule : public IKRRenderModuleExport {
 
     KRAnyValue CallMethod(bool sync, const std::string &method, KRAnyValue params,
                           const KRRenderCallback &callback) override;
+    void WillDestroy() override;
     void OnDestroy() override;
 
     // 最近一次实测帧间隔（纳秒）。尚无 vsync 时返回 0。

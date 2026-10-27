@@ -28,6 +28,7 @@ namespace {
 constexpr int64_t kSliceBudgetNs = 2'000'000;
 
 thread_local bool t_in_pull_scope = false;
+std::atomic<uint32_t> g_mainPullTasks{0};
 
 class PullScope {
  public:
@@ -66,6 +67,10 @@ bool KRMainThreadTaskPuller::IsInPullScope() {
     return t_in_pull_scope;
 }
 
+uint32_t KRMainThreadTaskPuller::ExchangeMainPullTaskCount() {
+    return g_mainPullTasks.exchange(0, std::memory_order_relaxed);
+}
+
 void KRMainThreadTaskPuller::ScheduleSlice() {
     if (slice_queued_.exchange(true)) {
         return;
@@ -99,6 +104,7 @@ void KRMainThreadTaskPuller::RunSlice() {
                 gate.RecordPullStop(KRInputFirstGate::PullStop::kQueueEmptyOrBusy);
                 break;
             }
+            g_mainPullTasks.fetch_add(1, std::memory_order_relaxed);
         }
     }
     if (sliceBudgetExhausted) {

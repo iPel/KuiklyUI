@@ -86,7 +86,7 @@ static double InputLatencyMs(const KRAnyValue &res) {
         return -1;
     }
     auto map = res->toMap();
-    auto it = map.find("timestamp");
+    auto it = map.find(u"timestamp");
     if (it == map.end()) {
         return -1;
     }

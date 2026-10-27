@@ -32,6 +32,9 @@ class KRMainThreadTaskPuller {
     // 当前线程是否正在主线程上执行 context 任务。这段时间内产生的主线程 UI 任务须等锁释放后再执行。
     static bool IsInPullScope();
 
+    // 本轮会话里主线程实际执行的 context 任务数。读出后清零。
+    static uint32_t ExchangeMainPullTaskCount();
+
  private:
     // 任意线程调用。context 线程暂停期间有新任务时由它调用。
     static void ScheduleSlice();

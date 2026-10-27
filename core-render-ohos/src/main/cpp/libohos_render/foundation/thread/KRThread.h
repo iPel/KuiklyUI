@@ -64,6 +64,9 @@ class KRThread {
      */
     bool TryRunOnCurThread(std::chrono::microseconds window, const std::function<void()> &task);
 
+    // 已经暂停后仍开始执行的任务数。会话开始时清零，会话结束时读出。
+    static uint32_t ExchangeTasksStartedWhileParked();
+
     /**
      * @brief 拿到 context 任务锁后，取出并执行共享队列中的下一个立即任务。供主线程在连续同步事件期间调用。
      * @return 执行了一个任务返回 true；队列为空或没能立刻拿到锁返回 false。
