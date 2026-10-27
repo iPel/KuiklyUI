@@ -37,6 +37,9 @@ class KRContextSchedulerInternal {
     virtual void ScheduleTask(int delayMs, const KRSchedulerTask &task) = 0;
     virtual void ScheduleTaskOnMainThread(bool sync, const KRSchedulerTask &task) = 0;
     virtual void DirectRunOnMainThread(bool isSync, const KRSchedulerTask &task) = 0;
+    virtual bool TryDirectRunOnMainThread(std::chrono::microseconds window, const KRSchedulerTask &task) = 0;
+    virtual bool TryRunNextContextTaskOnMainThread() = 0;
+    virtual void SetContextThreadParked(bool parked, const std::function<void()> &notifier) = 0;
 
     virtual bool IsCurrentOnContextThread() = 0;
 };
@@ -46,6 +49,9 @@ class KRContextSchedulerMultiThreaded : public KRContextSchedulerInternal {
     void ScheduleTask(int delayMs, const KRSchedulerTask &task) override;
     void ScheduleTaskOnMainThread(bool sync, const KRSchedulerTask &task) override;
     void DirectRunOnMainThread(bool isSync, const KRSchedulerTask &task) override;
+    bool TryDirectRunOnMainThread(std::chrono::microseconds window, const KRSchedulerTask &task) override;
+    bool TryRunNextContextTaskOnMainThread() override;
+    void SetContextThreadParked(bool parked, const std::function<void()> &notifier) override;
     bool IsCurrentOnContextThread() override;
 
  private:
@@ -88,6 +94,28 @@ void KRContextSchedulerMultiThreaded::DirectRunOnMainThread(bool isSync, const K
     } else {
         GetContextThread()->DispatchAsync(task, 0);
     }
+}
+
+bool KRContextSchedulerMultiThreaded::TryDirectRunOnMainThread(std::chrono::microseconds window,
+                                                              const KRSchedulerTask &task) {
+    return GetContextThread()->TryRunOnCurThread(window, [&task]() {
+        MainThreadContextGuard ctxGuard;
+        task();
+    });
+}
+
+bool KRContextSchedulerMultiThreaded::TryRunNextContextTaskOnMainThread() {
+    // 与同步事件一样让主线程执行的任务被 IsCurrentOnContextThread() 视为在 context 线程上。
+    MainThreadContextGuard ctxGuard;
+    return GetContextThread()->TryRunNextPendingTaskOnCurThread();
+}
+
+void KRContextSchedulerMultiThreaded::SetContextThreadParked(bool parked, const std::function<void()> &notifier) {
+    auto *thread = GetContextThread();
+    // notifier 在 context 线程读取，只允许在首次暂停前设置一次，避免并发读写。
+    static std::once_flag notifierOnce;
+    std::call_once(notifierOnce, [thread, &notifier] { thread->SetParkedTaskNotifier(notifier); });
+    thread->SetParked(parked);
 }
 
 void KRContextSchedulerMultiThreaded::ScheduleTask(int delayMs, const KRSchedulerTask &task) {
@@ -201,9 +229,27 @@ class KRContextSchedulerSingleThreaded : public KRContextSchedulerInternal {
     void ScheduleTask(int delayMs, const KRSchedulerTask &task) override;
     void ScheduleTaskOnMainThread(bool sync, const KRSchedulerTask &task) override;
     void DirectRunOnMainThread(bool isSync, const KRSchedulerTask &task) override;
+    bool TryDirectRunOnMainThread(std::chrono::microseconds window, const KRSchedulerTask &task) override;
+    bool TryRunNextContextTaskOnMainThread() override;
+    void SetContextThreadParked(bool parked, const std::function<void()> &notifier) override;
     bool IsCurrentOnContextThread() override;
     std::thread::id mainThreadId;
 };
+
+bool KRContextSchedulerSingleThreaded::TryDirectRunOnMainThread(std::chrono::microseconds /*window*/,
+                                                               const KRSchedulerTask &task) {
+    mainThreadId = std::this_thread::get_id();
+    task();
+    return true;
+}
+
+bool KRContextSchedulerSingleThreaded::TryRunNextContextTaskOnMainThread() {
+    // 单线程模式下 context 任务本来就在主线程事件循环里执行，不用再从队列取。
+    return false;
+}
+
+void KRContextSchedulerSingleThreaded::SetContextThreadParked(bool /*parked*/,
+                                                              const std::function<void()> & /*notifier*/) {}
 
 void KRContextSchedulerSingleThreaded::DirectRunOnMainThread(bool isSync, const KRSchedulerTask &task) {
     mainThreadId = std::this_thread::get_id();
@@ -215,7 +261,13 @@ void KRContextSchedulerSingleThreaded::DirectRunOnMainThread(bool isSync, const 
 }
 
 void KRContextSchedulerSingleThreaded::ScheduleTask(int delayMs, const KRSchedulerTask &task) {
-    KRMainThread::RunOnMainThread(task, delayMs);
+    // ScheduleTask 是异步的：delay 为 0 也不能在当前调用栈里直接执行。调用方可能正拿着锁，
+    // 例如 KRUIScheduler::AddTaskToMainQueueWithTask 拿着 m_mutex_ 时投递下一次 UI 刷新。
+    if (delayMs > 0) {
+        KRMainThread::RunOnMainThread(task, delayMs);
+    } else {
+        KRMainThread::RunOnMainThreadForNextLoop(task);
+    }
 }
 
 void KRContextSchedulerSingleThreaded::ScheduleTaskOnMainThread(bool sync, const KRSchedulerTask &task) {
@@ -241,11 +293,11 @@ std::shared_ptr<KRContextSchedulerInternal> KRContextScheduler::GetInstance() {
     static std::shared_ptr<KRContextSchedulerInternal> instance_ = nullptr;
     static std::once_flag flag;
     std::call_once(flag, []() {
-        instance_ = gThreadingMode == KRContextScheduler::ThreadingMode::MultiThread
-                        ? std::dynamic_pointer_cast<KRContextSchedulerInternal>(
-                              std::make_shared<KRContextSchedulerMultiThreaded>())
-                        : std::dynamic_pointer_cast<KRContextSchedulerInternal>(
-                              std::make_shared<KRContextSchedulerSingleThreaded>());
+        const bool multi = gThreadingMode == KRContextScheduler::ThreadingMode::MultiThread;
+        instance_ = multi ? std::dynamic_pointer_cast<KRContextSchedulerInternal>(
+                                std::make_shared<KRContextSchedulerMultiThreaded>())
+                          : std::dynamic_pointer_cast<KRContextSchedulerInternal>(
+                                std::make_shared<KRContextSchedulerSingleThreaded>());
     });
     return instance_;
 }
@@ -259,6 +311,15 @@ void KRContextScheduler::ScheduleTaskOnMainThread(bool sync, const KRSchedulerTa
 void KRContextScheduler::DirectRunOnMainThread(bool isSync, const KRSchedulerTask &task) {
     GetInstance()->DirectRunOnMainThread(isSync, task);
 }
+bool KRContextScheduler::TryDirectRunOnMainThread(std::chrono::microseconds window, const KRSchedulerTask &task) {
+    return GetInstance()->TryDirectRunOnMainThread(window, task);
+}
+bool KRContextScheduler::TryRunNextContextTaskOnMainThread() {
+    return GetInstance()->TryRunNextContextTaskOnMainThread();
+}
+void KRContextScheduler::SetContextThreadParked(bool parked, const std::function<void()> &notifier) {
+    GetInstance()->SetContextThreadParked(parked, notifier);
+}
 bool KRContextScheduler::IsCurrentOnContextThread() {
     return GetInstance()->IsCurrentOnContextThread();
 }
@@ -268,7 +329,7 @@ EXTERN_C_START
  * 让用户设置线程模型。
  * @param mode 0 ：默认模式，多线程， 1 ：非 0 即视为单线程同步模式
  *
- * 线程模式暂时仅允许深度合作用户进行设置，暂不暴露到头文件。
+ * 须在 KRContextScheduler 首次创建前调用一次。不放进 Kuikly.h，不给宿主调用。
  */
 void KRSetThreadingMode(int mode) {
     // 显式 mode != 0 比 !!mode 更直观；ThreadingMode 是二元枚举（MultiThread / SingleThread），

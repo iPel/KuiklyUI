@@ -22,6 +22,7 @@
 #include "libohos_render/foundation/KRConfig.h"
 #include "libohos_render/foundation/type/KRRenderValue.h"
 #include "libohos_render/manager/KRSnapshotManager.h"
+#include "libohos_render/scheduler/KRInputFirstGate.h"
 #include "libohos_render/utils/KRConvertUtil.h"
 #include "libohos_render/utils/KRJSONObject.h"
 #include "libohos_render/utils/KRViewUtil.h"
@@ -74,6 +75,7 @@ KRView::KRView() {
 }
 
 KRView::~KRView() {
+    ReleaseInputSessions();
     StopObservingInternalScrollViews();
     CleanupHandleNodes();
     if (scroll_observer_) {
@@ -455,6 +457,8 @@ void KRView::ProcessTouchEvent(ArkUI_NodeEvent *event) {
     auto input_event = kuikly::util::GetArkUIInputEvent(event);
     TryFireSuperTouchCancelEvent(input_event);
     auto action = kuikly::util::GetArkUIInputEventAction(input_event);
+    // 按下和抬起的计数在父容器拦截之前更新，保证 DOWN 与 UP / CANCEL 成对。
+    UpdateTouchSession(action);
     EnsureSuperTouchType();
     if (super_touch_type_ == PARENT) {
         auto parent_super_touch_handler = parent_super_touch_handler_.lock();
@@ -648,8 +652,49 @@ void KRView::UpdateHitTestMode(bool shouldUseTarget) {
 
 void KRView::WillRemoveFromParentView() {
     IKRRenderViewExport::WillRemoveFromParentView();
+    ReleaseInputSessions();
     parent_super_touch_handler_.reset();
     super_touch_type_ = UNKNOWN;
+}
+
+void KRView::SetEventSync(const std::string &event_name, bool sync) {
+    if (kuikly::util::isEqual(event_name, kPropNameTouchMove)) {
+        touch_move_sync_ = sync;
+    }
+}
+
+// 注册了同步 touchMove 时：第一根手指按下时通知 KRInputFirstGate 开始，最后一根手指抬起或取消时通知结束。
+void KRView::UpdateTouchSession(int32_t action) {
+    if (action == UI_TOUCH_EVENT_ACTION_DOWN) {
+        if (active_touch_pointers_++ == 0 && touch_move_callback_ && touch_move_sync_) {
+            KRInputFirstGate::GetInstance().BeginSession(this, KRInputFirstGate::SessionType::kTouch);
+            touch_session_active_ = true;
+        }
+    } else if (action == UI_TOUCH_EVENT_ACTION_UP) {
+        if (active_touch_pointers_ > 0 && --active_touch_pointers_ == 0) {
+            EndTouchSession();
+        }
+    } else if (action == UI_TOUCH_EVENT_ACTION_CANCEL) {
+        active_touch_pointers_ = 0;
+        EndTouchSession();
+    }
+}
+
+void KRView::EndTouchSession() {
+    if (!touch_session_active_) {
+        return;
+    }
+    touch_session_active_ = false;
+    KRInputFirstGate::GetInstance().EndSession(this, KRInputFirstGate::SessionType::kTouch);
+}
+
+// view 被移除、复用或销毁时，通知 KRInputFirstGate 结束它登记的连续事件，并清空触摸计数。复用时新手势从零开始。
+void KRView::ReleaseInputSessions() {
+    active_touch_pointers_ = 0;
+    if (touch_session_active_) {
+        touch_session_active_ = false;
+        KRInputFirstGate::GetInstance().ReleaseSessions(this);
+    }
 }
 
 std::vector<std::shared_ptr<KRRichTextView>> KRView::GetSelectedNodes(KRPoint p0, KRPoint p1) {

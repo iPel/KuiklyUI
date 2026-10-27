@@ -195,6 +195,12 @@ class IKRRenderViewExport : public std::enable_shared_from_this<IKRRenderViewExp
      */
     virtual void OnDestroy() {}
     /**
+     * 事件注册时告知是否为同步注册。连续同步事件据此决定要不要通知 KRInputFirstGate。
+     * @param event_name 事件名
+     * @param sync 是否同步
+     */
+    virtual void SetEventSync(const std::string &event_name, bool sync) {}
+    /**
      * 将要复用时调用
      */
     virtual void WillReuse() {}

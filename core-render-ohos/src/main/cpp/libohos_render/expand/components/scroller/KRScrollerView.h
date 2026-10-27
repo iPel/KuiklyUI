@@ -69,6 +69,7 @@ class KRScrollerContentView : public IKRRenderViewExport {
 class KRScrollerView : public IKRRenderViewExport {
  public:
     KRScrollerView() = default;
+    ~KRScrollerView();
     KRScrollerView(const KRScrollerView &) = delete;
     KRScrollerView(KRScrollerView &&) = delete;
     KRScrollerView &operator=(const KRScrollerView &) = delete;
@@ -89,6 +90,7 @@ class KRScrollerView : public IKRRenderViewExport {
     KRPoint GetContentOffset();
     void DidMoveToParentView() override;
     void WillRemoveFromParentView() override;
+    void SetEventSync(const std::string &event_name, bool sync) override;
     ArkUI_GestureInterruptResult OnInterruptGestureEvent(const ArkUI_GestureInterruptInfo *info) override;
     void TryApplyPendingFireOnScroll();
     void OnStatusBarClicked() override;
@@ -136,6 +138,7 @@ class KRScrollerView : public IKRRenderViewExport {
     void InnerSetBouncesEnable(bool enable);
     void AdjustHeaderBouncesEnableWhenWillScroll(ArkUI_NodeEvent *event);
     void DispatchDidScrollToObservers(KRPoint point);
+    void ReleaseInputSessions();
     bool SetFlingEnable(bool enable);
     bool SetFlingSpeedLimit(const KRAnyValue &value);
     KRPoint MaxContentOffsetInContentInset(const std::shared_ptr<KRScrollerContentInset> &content_inset);
@@ -159,6 +162,9 @@ class KRScrollerView : public IKRRenderViewExport {
     KRRenderCallback on_scroll_end_callback_ = nullptr;
     KRRenderCallback on_will_drag_end_callback_ = nullptr;
     KRRenderCallback on_scroll_to_top_callback_ = nullptr;
+    // scroll 是否以同步方式注册，以及这次滚动是否已通知 KRInputFirstGate。
+    bool scroll_sync_ = false;
+    bool scroll_session_active_ = false;
     std::shared_ptr<KRScrollerContentView> content_view_;
     bool bounces_enabled_ = true;
     bool limit_header_bounces_ = false;

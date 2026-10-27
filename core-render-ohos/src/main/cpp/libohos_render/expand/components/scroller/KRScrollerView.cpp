@@ -24,6 +24,7 @@
 #include <deviceinfo.h>
 #include "libohos_render/expand/components/view/KRView.h"
 #include "libohos_render/foundation/type/KRRenderValue.h"
+#include "libohos_render/scheduler/KRInputFirstGate.h"
 #include "libohos_render/utils/KRJSONObject.h"
 
 
@@ -789,6 +790,10 @@ void KRScrollerView::OnScrollStop(ArkUI_NodeEvent *event) {
         // each frame of the spring animation is a non-animated scrollTo, which may report a stop
         return;
     }
+    if (scroll_session_active_) {
+        scroll_session_active_ = false;
+        KRInputFirstGate::GetInstance().EndSession(this, KRInputFirstGate::SessionType::kScroll);
+    }
     current_scroll_state_ = ArkUI_ScrollState::ARKUI_SCROLL_STATE_IDLE;
     if (is_dragging_) {
         OnWillDragEnd(event);
@@ -839,7 +844,26 @@ void KRScrollerView::OnWillDragEnd(ArkUI_NodeEvent *event) {
     FireEndDragEvent(event);
 }
 
-void KRScrollerView::OnScrollStart(ArkUI_NodeEvent *event) {}
+// 注册了同步 scroll 时，ArkUI 滚动开始就通知 KRInputFirstGate，滚动停止时再通知结束。
+void KRScrollerView::OnScrollStart(ArkUI_NodeEvent *event) {
+    if (scroll_sync_ && on_scroll_callback_ && !scroll_session_active_) {
+        scroll_session_active_ = true;
+        KRInputFirstGate::GetInstance().BeginSession(this, KRInputFirstGate::SessionType::kScroll);
+    }
+}
+
+void KRScrollerView::SetEventSync(const std::string &event_name, bool sync) {
+    if (kuikly::util::isEqual(event_name, kEventNameScroll)) {
+        scroll_sync_ = sync;
+    }
+}
+
+void KRScrollerView::ReleaseInputSessions() {
+    if (scroll_session_active_) {
+        scroll_session_active_ = false;
+        KRInputFirstGate::GetInstance().ReleaseSessions(this);
+    }
+}
 
 void KRScrollerView::OnScrollReachStart(ArkUI_NodeEvent *event) {
     if (!limit_header_bounces_) {
@@ -979,7 +1003,12 @@ void KRScrollerView::DidMoveToParentView() {
 
 void KRScrollerView::WillRemoveFromParentView() {
     IKRRenderViewExport::WillRemoveFromParentView();
+    ReleaseInputSessions();
     weak_super_touch_handler_.reset();
+}
+
+KRScrollerView::~KRScrollerView() {
+    ReleaseInputSessions();
 }
 
 ArkUI_GestureInterruptResult KRScrollerView::OnInterruptGestureEvent(const ArkUI_GestureInterruptInfo *info) {
