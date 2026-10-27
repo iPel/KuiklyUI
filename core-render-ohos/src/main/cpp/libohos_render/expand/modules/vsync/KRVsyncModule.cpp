@@ -96,19 +96,14 @@ void KRVsyncModule::RegisterVsync(const KRRenderCallback &callback) {
 }
 
 void KRVsyncModule::UnRegisterVsync() {
-    {
-        std::lock_guard<std::mutex> guard(mutex_);
-        running_ = false;
-        callback_ = nullptr;
-        // 代数递增后，在途回调因 generation 不匹配被安全丢弃
-        generation_++;
-        // 释放槽侧引用；若在途回调尚未到达，其引用减法会将计数归零并完成释放
-        ReleaseRequestRef(pending_request_);
-        pending_request_ = nullptr;
-    }
-    if (KRInputFirstGate::GetInstance().HasDeferred()) {
-        KR_LOG_INFO_WITH_TAG("KRVsyncModule") << "unregister with deferred frame";
-    }
+    std::lock_guard<std::mutex> guard(mutex_);
+    running_ = false;
+    callback_ = nullptr;
+    // 代数递增后，在途回调因 generation 不匹配被安全丢弃
+    generation_++;
+    // 释放槽侧引用；若在途回调尚未到达，其引用减法会将计数归零并完成释放
+    ReleaseRequestRef(pending_request_);
+    pending_request_ = nullptr;
 }
 
 // 调用前须持有 mutex_
@@ -208,9 +203,9 @@ void KRVsyncModule::OnVsync(long long timestamp, void *data) {
     };
     auto &gate = KRInputFirstGate::GetInstance();
     if (tick_was_pending) {
-        // 上一帧被暂存且整帧没有输入：用这一帧的信息合并后投递；否则丢弃这一帧。
-        gate.MergeDeferred(dispatch);
-    } else if (!gate.OnVsync(timestamp, dispatch)) {
+        // 本模块上一帧被暂存且整帧没有输入：用这一帧的信息合并后投递；否则丢弃这一帧。
+        gate.MergeDeferred(self.get(), dispatch);
+    } else if (!gate.OnVsync(self.get(), timestamp, dispatch)) {
         dispatch();
     }
     ReleaseRequestRef(context);

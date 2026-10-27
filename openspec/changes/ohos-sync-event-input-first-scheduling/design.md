@@ -154,7 +154,7 @@ Android / iOS 作为后续独立 change，在鸿蒙 A/B 结论后决策。
 **core-render-ohos**
 
 - `foundation/thread/KRThread.{h,cpp}`：`TryRunOnCurThread(window, task)`；等待计数；`OnAsync` 在当前任务做完后释放锁，并把剩余任务放回队首；暂停和恢复（`SetParked`），以及暂停期间有任务时的通知；主线程持锁取下一个任务的接口。
-- `scheduler/KRInputFirstGate.{h,cpp}`（新增）：按 view 和事件类型计数，view 销毁时清掉；从无到有、从有到无时通知主线程执行逻辑；暂存帧任务、合并下一次 vsync、没有新输入时直接投递。
+- `scheduler/KRInputFirstGate.{h,cpp}`（新增）：按 view 和事件类型计数，view 销毁时清掉；从无到有、从有到无时通知主线程执行逻辑；按 `KRVsyncModule` 分别暂存帧任务、合并该模块的下一次 vsync、没有新输入时直接投递；同步连续事件按计数判断是否处理完，嵌套时以最外层为准。
 - `scheduler/KRMainThreadTaskPuller.{h,cpp}`（新增）：连续同步事件期间暂停和恢复 context 线程，主线程每一轮最多执行 2ms。没有单独的关闭方式。
 - `scheduler/KRContextScheduler.{h,cpp}`：`TryDirectRunOnMainThread`；`TryRunNextContextTaskOnMainThread`；`SetContextThreadParked`；D4 修复。
 - `expand/modules/vsync/KRVsyncModule.{h,cpp}`：把一帧的投递交给 `KRInputFirstGate`；暂存时下一次 vsync 改为合并后投递；投递时重新校验 generation。
@@ -178,7 +178,7 @@ Android / iOS 作为后续独立 change，在鸿蒙 A/B 结论后决策。
 - [context 任务里的阻塞 IO 会在手势期间堵住主线程] → 2ms 只在任务之间生效，切不开一个正在执行的阻塞任务。要在验证里看。有问题的模块应改成异步。
 - [事件期间主线程承担全部 context 任务，复杂页面可能掉帧] → 每轮最多 2ms，ArkUI 能在两轮之间分发输入和渲染。2026-10-12 复杂 Compose 列表（200 行、50ms 定时器、拖拽和快速滚动，120Hz）上，同步 touchMove 和主线程执行一起生效时，手势期间上屏仍是 120Hz，没有超过 2 帧的间隔。只开同步 touchMove、context 任务仍留在 context 线程时，滚动等锁 p90 为 10.4ms，延迟 p90 为 21.4ms。两者一起时降到 0.008ms / 11.1ms。
 - [进入时要等 context 线程把当前任务做完] → 和「当前任务做完后释放锁」的等待上限一样。
-- [主线程执行任务时直接做 UI，会在还拿着锁时再次进入同步事件] → 这段时间内的 UI 任务等锁释放后再执行。debug 构建里，主线程拿着锁再次进入 `TryRunOnCurThread` 会断言。
+- [主线程执行任务时直接做 UI，会在还拿着锁时再次进入同步事件] → 这段时间内的 UI 任务等锁释放后再执行。主线程拿着锁再次进入 `TryRunOnCurThread` 会直接返回 false，改成异步执行。
 - [`KRInputFirstGate` 是全局单例，多个页面共用] → context 线程也是全局的。只有注册了同步连续事件的 view 会上报。没有这类事件的页面不受影响。
 
 ## Migration Plan

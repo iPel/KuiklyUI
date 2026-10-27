@@ -338,7 +338,8 @@ void KRScrollerView::FireOnScrollEvent(ArkUI_NodeEvent *event) {
 }
 
 void KRScrollerView::FireBeginDragEvent(ArkUI_NodeEvent *event) {
-    CancelSpringScrollAnimation();
+    // 新的拖拽接上还在跑的弹簧滚动，scroll 会话继续，不在这里结束。
+    CancelSpringScrollAnimation(false);
     if (!on_drag_begin_callback_) {
         return;
     }
@@ -377,6 +378,7 @@ void KRScrollerView::DidInsertSubRenderView(const std::shared_ptr<IKRRenderViewE
 }
 
 void KRScrollerView::OnDestroy() {
+    EndScrollSession();
     DisposeSpringScrollAnimator();
     if (!content_view_) {
         return;
@@ -492,8 +494,10 @@ void KRScrollerView::SetContentOffset(const KRAnyValue &value) {
     auto damping = content_offset_splits.size() > 4 ? content_offset_splits[4]->toFloat() : 0;
     auto velocity = content_offset_splits.size() > 5 ? content_offset_splits[5]->toFloat() : 0;
     auto curve = content_offset_splits.size() > 6 ? content_offset_splits[6]->toInt() : 0;
-    CancelSpringScrollAnimation();
+    const bool start_spring = animate && duration > 0 && damping >= 1.0f && curve == 0;
     if (!is_set_frame_) {
+        // 还没布局，这次不会接着播弹簧滚动，取消就是滚动结束。
+        CancelSpringScrollAnimation(true);
         first_offset_x_ = offset_x;
         first_offset_y_ = offset_y;
         first_animate_ = animate;
@@ -503,7 +507,9 @@ void KRScrollerView::SetContentOffset(const KRAnyValue &value) {
         is_need_set_content_offset_ = true;
         return;
     }
-    if (animate && duration > 0 && damping >= 1.0f && curve == 0) {
+    // 接着播新的弹簧滚动时，上一笔 scroll 会话继续；否则这次取消就是滚动结束。
+    CancelSpringScrollAnimation(!start_spring);
+    if (start_spring) {
         float velocity_x = direction_row_ ? velocity : 0;
         float velocity_y = direction_row_ ? 0 : velocity;
         if (StartSpringScrollAnimation(offset_x, offset_y, duration, velocity_x, velocity_y)) {
@@ -596,6 +602,8 @@ bool KRScrollerView::StartSpringScrollAnimation(float target_x, float target_y, 
     spring_anim_running_ = true;
     spring_anim_start_us_ = SpringNowUs();
     OH_ArkUI_Animator_Play(spring_animator_);
+    // 弹簧滚动的 scrollTo 会让 OnScrollStop 直接返回，同步 scroll 的会话保持到 OnSpringScrollAnimationEnd。
+    OnScrollStart(nullptr);
     return true;
 }
 
@@ -619,13 +627,14 @@ void KRScrollerView::OnSpringScrollAnimationEnd(uint32_t generation) {
     spring_anim_running_ = false;
     kuikly::util::SetArkUIContentOffset(GetNode(), spring_anim_target_x_, spring_anim_target_y_, false, 0, 0, 0);
     current_scroll_state_ = ArkUI_ScrollState::ARKUI_SCROLL_STATE_IDLE;
+    EndScrollSession();
     FireEndScrollEvent(nullptr);
     if (auto handler = weak_super_touch_handler_.lock()) {
         handler->ClearNativeTouchConsumer(shared_from_this());
     }
 }
 
-void KRScrollerView::CancelSpringScrollAnimation() {
+void KRScrollerView::CancelSpringScrollAnimation(bool end_session) {
     if (!spring_anim_running_) {
         return;
     }
@@ -634,8 +643,13 @@ void KRScrollerView::CancelSpringScrollAnimation() {
     if (spring_animator_) {
         OH_ArkUI_Animator_Cancel(spring_animator_);
     }
+    if (end_session) {
+        EndScrollSession();
+    }
 }
 
+// StartSpringScrollAnimation 会先调用这里换掉上一个 animator，此时滚动还没结束，不能结束 scroll 会话。
+// 会话在 OnSpringScrollAnimationEnd、取消且不再滚动、WillRemoveFromParentView、OnDestroy 结束。
 void KRScrollerView::DisposeSpringScrollAnimator() {
     spring_anim_running_ = false;
     spring_anim_generation_++;
@@ -790,10 +804,7 @@ void KRScrollerView::OnScrollStop(ArkUI_NodeEvent *event) {
         // each frame of the spring animation is a non-animated scrollTo, which may report a stop
         return;
     }
-    if (scroll_session_active_) {
-        scroll_session_active_ = false;
-        KRInputFirstGate::GetInstance().EndSession(this, KRInputFirstGate::SessionType::kScroll);
-    }
+    EndScrollSession();
     current_scroll_state_ = ArkUI_ScrollState::ARKUI_SCROLL_STATE_IDLE;
     if (is_dragging_) {
         OnWillDragEnd(event);
@@ -844,7 +855,8 @@ void KRScrollerView::OnWillDragEnd(ArkUI_NodeEvent *event) {
     FireEndDragEvent(event);
 }
 
-// 注册了同步 scroll 时，ArkUI 滚动开始就通知 KRInputFirstGate，滚动停止时再通知结束。
+// 注册了同步 scroll 时，ArkUI 滚动开始就通知 KRInputFirstGate。滚动停止、弹簧滚动结束或取消、
+// view 被移除或销毁时通知结束。
 void KRScrollerView::OnScrollStart(ArkUI_NodeEvent *event) {
     if (scroll_sync_ && on_scroll_callback_ && !scroll_session_active_) {
         scroll_session_active_ = true;
@@ -858,10 +870,10 @@ void KRScrollerView::SetEventSync(const std::string &event_name, bool sync) {
     }
 }
 
-void KRScrollerView::ReleaseInputSessions() {
+void KRScrollerView::EndScrollSession() {
     if (scroll_session_active_) {
         scroll_session_active_ = false;
-        KRInputFirstGate::GetInstance().ReleaseSessions(this);
+        KRInputFirstGate::GetInstance().EndSession(this, KRInputFirstGate::SessionType::kScroll);
     }
 }
 
@@ -1003,12 +1015,8 @@ void KRScrollerView::DidMoveToParentView() {
 
 void KRScrollerView::WillRemoveFromParentView() {
     IKRRenderViewExport::WillRemoveFromParentView();
-    ReleaseInputSessions();
+    EndScrollSession();
     weak_super_touch_handler_.reset();
-}
-
-KRScrollerView::~KRScrollerView() {
-    ReleaseInputSessions();
 }
 
 ArkUI_GestureInterruptResult KRScrollerView::OnInterruptGestureEvent(const ArkUI_GestureInterruptInfo *info) {
@@ -1069,7 +1077,8 @@ void KRScrollerView::PrepareForComposeReuse() {
 }
 
 void KRScrollerView::AbortContentOffsetAnimate() {
-    CancelSpringScrollAnimation();
+    CancelSpringScrollAnimation(true);
+    EndScrollSession();
     // 停止 ContentInset 动画（释放动画对象）
     if (content_inset_animate_) {
         content_inset_animate_ = nullptr;

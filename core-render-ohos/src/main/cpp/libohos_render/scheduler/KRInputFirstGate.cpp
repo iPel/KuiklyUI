@@ -94,7 +94,7 @@ void KRInputFirstGate::BeginSession(const void *owner, SessionType type) {
 }
 
 void KRInputFirstGate::EndSession(const void *owner, SessionType type) {
-    std::function<void()> dispatch;
+    std::vector<std::function<void()>> dispatches;
     Metrics finished;
     bool hasFinished = false;
     bool becameInactive = false;
@@ -105,7 +105,7 @@ void KRInputFirstGate::EndSession(const void *owner, SessionType type) {
         sessions_.erase({owner, type});
         becameInactive = wasActive && sessions_.empty();
         active = sessions_.size();
-        dispatch = TakeDeferredIfOutOfSessionLocked();
+        dispatches = TakeDeferredIfOutOfSessionLocked();
         hasFinished = TakeFinishedMetricsLocked(&finished);
     }
     KR_LOG_INFO_WITH_TAG("KRInputFirstGate")
@@ -113,7 +113,7 @@ void KRInputFirstGate::EndSession(const void *owner, SessionType type) {
     if (becameInactive) {
         KRMainThreadTaskPuller::OnSessionActiveChanged(false);
     }
-    if (dispatch) {
+    for (auto &dispatch : dispatches) {
         dispatch();
     }
     if (hasFinished) {
@@ -122,7 +122,7 @@ void KRInputFirstGate::EndSession(const void *owner, SessionType type) {
 }
 
 void KRInputFirstGate::ReleaseSessions(const void *owner) {
-    std::function<void()> dispatch;
+    std::vector<std::function<void()>> dispatches;
     Metrics finished;
     bool hasFinished = false;
     bool becameInactive = false;
@@ -135,7 +135,7 @@ void KRInputFirstGate::ReleaseSessions(const void *owner) {
         }
         becameInactive = wasActive && sessions_.empty();
         active = sessions_.size();
-        dispatch = TakeDeferredIfOutOfSessionLocked();
+        dispatches = TakeDeferredIfOutOfSessionLocked();
         hasFinished = TakeFinishedMetricsLocked(&finished);
     }
     KR_LOG_INFO_WITH_TAG("KRInputFirstGate")
@@ -143,7 +143,7 @@ void KRInputFirstGate::ReleaseSessions(const void *owner) {
     if (becameInactive) {
         KRMainThreadTaskPuller::OnSessionActiveChanged(false);
     }
-    if (dispatch) {
+    for (auto &dispatch : dispatches) {
         dispatch();
     }
     if (hasFinished) {
@@ -153,23 +153,25 @@ void KRInputFirstGate::ReleaseSessions(const void *owner) {
 
 void KRInputFirstGate::OnInputBegin() {
     std::lock_guard<std::mutex> lock(mutex_);
-    input_in_flight_ = true;
+    ++inputs_in_flight_;
     input_idle_ = false;
 }
 
 void KRInputFirstGate::OnInputDone() {
-    std::function<void()> dispatch;
+    std::vector<std::function<void()>> dispatches;
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        input_in_flight_ = false;
-        last_input_done_ns_ = NowNs();
-        dispatch = std::move(deferred_);
-        deferred_ = nullptr;
-        if (dispatch) {
-            ++metrics_.frame_wait_input;
+        if (inputs_in_flight_ > 0) {
+            --inputs_in_flight_;
         }
+        // 外层的同步事件还没处理完，帧任务继续等。
+        if (inputs_in_flight_ > 0) {
+            return;
+        }
+        last_input_done_ns_ = NowNs();
+        dispatches = TakeAllDeferredLocked();
     }
-    if (dispatch) {
+    for (auto &dispatch : dispatches) {
         dispatch();
     }
 }
@@ -179,33 +181,29 @@ bool KRInputFirstGate::IsInSession() {
     return !sessions_.empty();
 }
 
-bool KRInputFirstGate::HasDeferred() {
-    std::lock_guard<std::mutex> lock(mutex_);
-    return static_cast<bool>(deferred_);
-}
-
-bool KRInputFirstGate::OnVsync(int64_t vsyncTimestampNs, std::function<void()> dispatch) {
+bool KRInputFirstGate::OnVsync(const void *module, int64_t vsyncTimestampNs, std::function<void()> dispatch) {
     std::lock_guard<std::mutex> lock(mutex_);
     if (sessions_.empty()) {
         return false;
     }
     // 输入空闲，或本帧输入已在 vsync 之后处理完：立即投递。
-    if (input_idle_ || (!input_in_flight_ && last_input_done_ns_ >= vsyncTimestampNs)) {
+    if (input_idle_ || (inputs_in_flight_ == 0 && last_input_done_ns_ >= vsyncTimestampNs)) {
         ++metrics_.frame_direct;
         return false;
     }
-    deferred_ = std::move(dispatch);
+    deferred_[module] = std::move(dispatch);
     return true;
 }
 
-bool KRInputFirstGate::MergeDeferred(std::function<void()> dispatch) {
+bool KRInputFirstGate::MergeDeferred(const void *module, std::function<void()> dispatch) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!deferred_) {
+        auto it = deferred_.find(module);
+        if (it == deferred_.end()) {
             return false;
         }
-        // 整帧无输入：以新 vsync 的帧信息投递，丢弃旧的暂存，并停止等待直到下一次输入。
-        deferred_ = nullptr;
+        // 这个模块整帧无输入：以新 vsync 的帧信息投递，丢弃它旧的暂存，并停止等待直到下一次输入。
+        deferred_.erase(it);
         input_idle_ = true;
         ++metrics_.frame_merged;
         ++metrics_.input_idle_entries;
@@ -235,14 +233,22 @@ void KRInputFirstGate::RecordPullStop(PullStop reason) {
     ++metrics_.pull_stops[static_cast<size_t>(reason)];
 }
 
-std::function<void()> KRInputFirstGate::TakeDeferredIfOutOfSessionLocked() {
-    if (!sessions_.empty() || !deferred_) {
-        return nullptr;
+std::vector<std::function<void()>> KRInputFirstGate::TakeAllDeferredLocked() {
+    std::vector<std::function<void()>> dispatches;
+    dispatches.reserve(deferred_.size());
+    for (auto &entry : deferred_) {
+        dispatches.push_back(std::move(entry.second));
     }
-    auto dispatch = std::move(deferred_);
-    deferred_ = nullptr;
-    ++metrics_.frame_wait_input;
-    return dispatch;
+    deferred_.clear();
+    metrics_.frame_wait_input += static_cast<uint32_t>(dispatches.size());
+    return dispatches;
+}
+
+std::vector<std::function<void()>> KRInputFirstGate::TakeDeferredIfOutOfSessionLocked() {
+    if (!sessions_.empty()) {
+        return {};
+    }
+    return TakeAllDeferredLocked();
 }
 
 bool KRInputFirstGate::TakeFinishedMetricsLocked(Metrics *out) {

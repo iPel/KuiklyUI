@@ -17,7 +17,7 @@
 - [x] 3.2 `KRThread`：外部等待者计数（首次 `try_lock` 失败登记，获得锁或放弃时注销，RAII）
 - [x] 3.3 `KRThread::OnAsync`：任务之间看有没有人在等锁。有的话，先把剩余任务按原顺序放回 `m_pending` 队首，再释放锁。等计数归零后回到 loop 重新调度
 - [x] 3.4 `KRContextScheduler::TryDirectRunOnMainThread`；`KRRenderCore` 同步事件路径改用该接口，降级时投递语义与原实现一致
-- [x] 3.5 debug 断言：主线程拿着 context 任务锁时再次进入 `TryRunOnCurThread`
+- [x] 3.5 主线程拿着 context 任务锁时再次进入 `TryRunOnCurThread`：直接返回 false，改成异步执行
 - [x] 3.6 HarmonyOS 真机验证：多小任务负载下同步 touchMove 等锁上限降至单个 task；FIFO 顺序校验（序号断言）；canvas / 列表懒加载 / Compose 动画回归
   - 2026-10-27 设备 2LQ0223A26007226，debug Kotlin，uitest。`SyncTouchMovePerfPage` 上每帧 8ms 拆成 8 个任务：两次拖动等锁 p90 均为 0.005ms（单个任务约 1ms），`fifoBreaks=0`。同页带 Canvas。`SyncScrollPerfPage` 懒加载列表同步滚动 `fifoBreaks=0`。`SyncComposePerfPage` 每帧刷新 40 行，会话正常结束。无崩溃。
 

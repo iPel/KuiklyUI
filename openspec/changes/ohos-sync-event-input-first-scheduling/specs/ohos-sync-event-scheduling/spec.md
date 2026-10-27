@@ -109,7 +109,7 @@ HarmonyOS renderer 在连续同步事件期间 SHALL 由主线程执行 context 
 
 ### Requirement: 主线程执行 context 任务期间产生的 UI 任务 SHALL 在释放锁之后执行
 
-主线程持有 context 任务锁执行 context 任务时，任务产生的主线程 UI 任务（包括经 `PerformOnMainQueueWithTask` 投递的 UI 刷新）SHALL 不在当前调用栈里直接执行，SHALL 推迟到这把锁释放之后执行。否则 UI 操作可能同步触发 ArkUI 事件，并在还拿着锁时再次进入同步事件。主线程拿着这把锁时再次进入 `TryRunOnCurThread` SHALL 在 debug 构建中触发断言。
+主线程持有 context 任务锁执行 context 任务时，任务产生的主线程 UI 任务（包括经 `PerformOnMainQueueWithTask` 投递的 UI 刷新）SHALL 不在当前调用栈里直接执行，SHALL 推迟到这把锁释放之后执行。否则 UI 操作可能同步触发 ArkUI 事件，并在还拿着锁时再次进入同步事件。主线程拿着这把锁时再次进入 `TryRunOnCurThread` SHALL 直接返回 false，由调用方改成异步执行，SHALL 不等锁。
 
 #### Scenario: 一轮任务里的 UI 刷新推迟执行
 - **GIVEN** 主线程这一轮执行的任务里会投递 UI 刷新

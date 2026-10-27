@@ -29,9 +29,6 @@ class KRMainThreadTaskPuller {
     // 主线程调用：连续同步事件从无到有，或从有到无。
     static void OnSessionActiveChanged(bool active);
 
-    // 当前线程是否正在主线程上执行 context 任务。这段时间内产生的主线程 UI 任务须等锁释放后再执行。
-    static bool IsInPullScope();
-
     // 本轮会话里主线程实际执行的 context 任务数。读出后清零。
     static uint32_t ExchangeMainPullTaskCount();
 

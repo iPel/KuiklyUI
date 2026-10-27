@@ -45,6 +45,7 @@ class KRView : public IKRRenderViewExport {
     void DidSetProp(const std::string &prop_key) override;
     void CallMethod(const std::string &method, const KRAnyValue &params, const KRRenderCallback &callback) override;
     void WillRemoveFromParentView() override;
+    void OnDestroy() override;
     void SetEventSync(const std::string &event_name, bool sync) override;
     std::shared_ptr<SuperTouchHandler> GetSuperTouchHandler() { return super_touch_handler_; }
     int32_t GetChildCount() override;
@@ -56,7 +57,7 @@ class KRView : public IKRRenderViewExport {
     void StopObservingInternalScrollViews();
     void CalculateHandleFramesAndDoUpdate(bool from_user = false);
     void OnInternalScrollViewDidScroll(float offsetX, float offsetY);
-    void UpdateTouchSession(int32_t action);
+    void UpdateTouchSession(ArkUI_UIInputEvent *input_event, int32_t action);
     void EndTouchSession();
     void ReleaseInputSessions();
     void EnsureRegisterTouchEvent();

@@ -431,7 +431,7 @@ void KRThread::NotifyParkedIfPending() {
     }
 }
 
-bool KRThread::TryRunNextPendingTaskOnCurThread() {
+bool KRThread::TryRunNextPendingTaskOnCurThread(const std::function<void(const std::function<void()> &)> &run) {
     assert(!IsCurrentThreadWorkerThread() && "TryRunNextPendingTaskOnCurThread must be called by external thread");
     assert(m_externalOwner.load() != std::this_thread::get_id() &&
            "KRThread::TryRunNextPendingTaskOnCurThread re-entered while holding the task mutex");
@@ -451,7 +451,7 @@ bool KRThread::TryRunNextPendingTaskOnCurThread() {
     }
     // 和 context 线程用同一个队列：只从队首取，取出和执行都在持有 context 任务锁时进行。
     ExternalExecutionGuard execGuard(m_isExecutingTask, m_externalOwner);
-    task();
+    run(task);
     return true;
 }
 
@@ -459,10 +459,11 @@ bool KRThread::TryRunOnCurThread(std::chrono::microseconds window, const std::fu
     if (!task) {
         return true;
     }
-    // m_taskMutex 不能重入。外部线程拿着锁再次进入，说明调用链重入了
-    // （例如拿着锁时直接执行了 UI 任务，UI 又同步触发了同步事件）。会空转到超时，然后改成异步执行。
-    assert(m_externalOwner.load() != std::this_thread::get_id() &&
-           "KRThread::TryRunOnCurThread re-entered while holding the task mutex");
+    // 本线程已经持有 m_taskMutex（例如主线程持锁执行任务时，UI 操作同步触发了同步事件）。
+    // std::mutex 不能重入，直接返回 false，由调用方改成异步执行。
+    if (m_externalOwner.load() == std::this_thread::get_id()) {
+        return false;
+    }
     if (m_isExecutingTask.load() && IsCurrentThreadWorkerThread()) {
         // 仅当“当前就在 worker 的执行栈里（task 体内嵌套调用）”才允许直跑，
         // 避免主线程在 context 线程持锁执行任务时绕过这把锁，造成数据竞争。

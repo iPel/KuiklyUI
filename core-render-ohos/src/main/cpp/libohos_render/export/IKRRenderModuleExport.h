@@ -59,15 +59,14 @@ class IKRRenderModuleExport : public std::enable_shared_from_this<IKRRenderModul
     }
 
     /**
-     * 页面销毁、view 尚未拆掉时调用。KRVsyncModule 在这里反注册，
-     * 让随后 view 释放会话时投出的暂存帧任务看到已经递增的 generation。
-     */
-    virtual void WillDestroy() {}
-
-    /**
      * Module 销毁时，此方法会被调用，用于销毁 module 中的资源
      */
     virtual void OnDestroy() {}
+
+    /**
+     * 页面将要销毁时调用，此时页面的 view 还没有销毁。随后才调用 OnDestroy
+     */
+    virtual void WillDestroy() {}
 
     /**
      * 异步调用ArkTS侧Module方法

@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <mutex>
 #include <set>
 #include <utility>
@@ -32,8 +33,9 @@
  * 滚动从开始到停止，手势从 start 到 end。以 (owner, type) 计数。owner 被移除或销毁时
  * ReleaseSessions 释放它登记的全部事件。不用时间阈值判断开始和结束。
  *
- * 帧任务：事件进行中、本帧输入还没处理完时先存起来，输入处理完再投递。下一帧 vsync 到来时
- * 仍存着，就合并成一次投递，之后到下一次输入之前直接投递。
+ * 帧任务：按 KRVsyncModule 分别暂存，每个模块最多存一帧。事件进行中、本帧输入还没处理完时先存起来，
+ * 输入处理完再投递所有模块的暂存。某个模块的下一帧 vsync 到来时它的暂存仍在，就合并成一次投递，
+ * 之后到下一次输入之前直接投递。
  *
  * 指标：事件进行期间累计，最后一次事件结束时打一行日志并清零。事件之外不做统计。
  *
@@ -61,24 +63,25 @@ class KRInputFirstGate {
     void ReleaseSessions(const void *owner);
 
     // 一次同步连续事件：Kotlin 回调执行前调用 OnInputBegin，回调和同步 UI 提交完成后调用 OnInputDone。
+    // 两者成对计数。嵌套时只有最外层的 OnInputDone 投递暂存的帧任务。
     void OnInputBegin();
     void OnInputDone();
 
     bool IsInSession();
-    // 是否有还没投递的 vsync 帧任务。销毁时用来确认这次反注册碰上了暂存。
-    bool HasDeferred();
 
     /**
-     * vsync 回调到达且无未消化帧任务时调用。
+     * module 的 vsync 回调到达、且它没有还没执行完的帧任务时调用。
+     * @param module 发起这一帧的 KRVsyncModule
      * @return true 表示这次 dispatch 已暂存，调用方不要再投递；false 表示调用方应立即投递
      */
-    bool OnVsync(int64_t vsyncTimestampNs, std::function<void()> dispatch);
+    bool OnVsync(const void *module, int64_t vsyncTimestampNs, std::function<void()> dispatch);
 
     /**
-     * vsync 回调到达但上一帧任务尚未消化时调用：若存在暂存，则以新 dispatch 合并投递并进入输入空闲。
-     * @return true 表示已合并投递；false 表示没有暂存，调用方按原规则丢弃这一帧
+     * module 的 vsync 回调到达、但它的上一帧任务还没执行完时调用：若 module 有暂存，
+     * 则以新 dispatch 替换并投递，进入输入空闲。
+     * @return true 表示已合并投递；false 表示 module 没有暂存，调用方按原规则丢弃这一帧
      */
-    bool MergeDeferred(std::function<void()> dispatch);
+    bool MergeDeferred(const void *module, std::function<void()> dispatch);
 
     /**
      * 记录一次连续同步事件的耗时。只在事件进行期间生效。
@@ -108,16 +111,19 @@ class KRInputFirstGate {
     };
 
     KRInputFirstGate() = default;
-    std::function<void()> TakeDeferredIfOutOfSessionLocked();
+    std::vector<std::function<void()>> TakeAllDeferredLocked();
+    std::vector<std::function<void()>> TakeDeferredIfOutOfSessionLocked();
     bool TakeFinishedMetricsLocked(Metrics *out);
     static void LogMetrics(const Metrics &metrics);
 
     std::mutex mutex_;
     std::set<std::pair<const void *, SessionType>> sessions_;
-    bool input_in_flight_ = false;
+    // 还没处理完的同步连续事件数。同步 UI 提交又触发同步事件时会嵌套，大于 1。
+    uint32_t inputs_in_flight_ = 0;
     bool input_idle_ = false;
     int64_t last_input_done_ns_ = 0;
-    std::function<void()> deferred_;
+    // 按 KRVsyncModule 暂存的帧任务。
+    std::map<const void *, std::function<void()>> deferred_;
     Metrics metrics_;
 };
 

@@ -105,9 +105,12 @@ bool KRContextSchedulerMultiThreaded::TryDirectRunOnMainThread(std::chrono::micr
 }
 
 bool KRContextSchedulerMultiThreaded::TryRunNextContextTaskOnMainThread() {
-    // 与同步事件一样让主线程执行的任务被 IsCurrentOnContextThread() 视为在 context 线程上。
-    MainThreadContextGuard ctxGuard;
-    return GetContextThread()->TryRunNextPendingTaskOnCurThread();
+    return GetContextThread()->TryRunNextPendingTaskOnCurThread([](const std::function<void()> &task) {
+        // 与 TryDirectRunOnMainThread 一致：拿到 context 任务锁之后才让 IsCurrentOnContextThread() 把主线程视为 context 线程。
+        MainThreadContextGuard ctxGuard;
+        KRMainThread::RunInNextLoopScope nextLoopScope;
+        task();
+    });
 }
 
 void KRContextSchedulerMultiThreaded::SetContextThreadParked(bool parked, const std::function<void()> &notifier) {
@@ -132,7 +135,8 @@ void KRContextSchedulerMultiThreaded::ScheduleTaskOnMainThread(bool sync, const 
 
     if (sync) {
         if (onMain) {
-            // 真在主线程，直跑即可。
+            // 真在主线程，直跑即可。调用方要当场拿到结果，持有 context 任务锁时也不能推迟；
+            // 若因此再次进入同步事件，TryRunOnCurThread 会返回 false，改成异步执行。
             task();
             return;
         }
@@ -198,13 +202,9 @@ void KRContextSchedulerMultiThreaded::ScheduleTaskOnMainThread(bool sync, const 
     }
 
     // async 分支：
-    if (onMain) {
-        // 已在主线程，沿用旧的 inline 直跑语义。
-        task();
-        return;
-    }
-    if (onWorker) {
-        // worker 线程：跨线程投递到主线程异步执行。
+    if (onMain || onWorker) {
+        // 主线程上沿用 inline 直跑语义；主线程正持有 context 任务锁执行 context 任务时，
+        // RunOnMainThread 改到下一轮主线程循环执行。worker 线程上跨线程投递到主线程异步执行。
         KRMainThread::RunOnMainThread(task);
         return;
     }

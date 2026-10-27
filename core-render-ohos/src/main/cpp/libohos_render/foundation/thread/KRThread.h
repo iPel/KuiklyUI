@@ -61,6 +61,7 @@ class KRThread {
      * @brief 在 window 内拿到 context 任务锁则在当前线程同步执行 task 并返回 true；
      *        否则不执行 task，返回 false，由调用方改成异步执行。
      *        等待期间记入等待计数。context 线程会在当前任务做完后释放锁。
+     *        当前线程已经持有这把锁时不等待，直接返回 false。
      */
     bool TryRunOnCurThread(std::chrono::microseconds window, const std::function<void()> &task);
 
@@ -68,10 +69,11 @@ class KRThread {
     static uint32_t ExchangeTasksStartedWhileParked();
 
     /**
-     * @brief 拿到 context 任务锁后，取出并执行共享队列中的下一个立即任务。供主线程在连续同步事件期间调用。
+     * @brief 拿到 context 任务锁后，取出共享队列中的下一个立即任务，交给 run 执行。供主线程在连续同步事件期间调用。
+     * @param run 持有 context 任务锁时调用，参数为取出的任务，须在返回前执行它。
      * @return 执行了一个任务返回 true；队列为空或没能立刻拿到锁返回 false。
      */
-    bool TryRunNextPendingTaskOnCurThread();
+    bool TryRunNextPendingTaskOnCurThread(const std::function<void(const std::function<void()> &)> &run);
 
     /**
      * @brief 暂停或恢复 context 线程执行任务。暂停期间它不再执行任务：正在跑一批时，
@@ -81,7 +83,8 @@ class KRThread {
     void SetParked(bool parked);
 
     /**
-     * @brief 设置暂停期间“有待执行任务”的通知。在 context 线程调用。须在首次 SetParked(true) 之前设置。
+     * @brief 设置暂停期间“有待执行任务”的通知。由主线程在首次 SetParked(true) 之前设置一次，之后不再修改；
+     *        通知只在 context 线程调用。
      */
     void SetParkedTaskNotifier(std::function<void()> notifier);
 

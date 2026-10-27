@@ -16,7 +16,6 @@
 #include "libohos_render/scheduler/KRUIScheduler.h"
 
 #include "libohos_render/scheduler/KRContextScheduler.h"
-#include "libohos_render/scheduler/KRMainThreadTaskPuller.h"
 #include "libohos_render/utils/KRRenderLoger.h"
 
 // should call on context线程
@@ -124,10 +123,8 @@ void KRUIScheduler::PerformOnMainQueueWithTask(bool sync, const std::function<vo
                 }
             },
             1);
-    } else if (KRMainThreadTaskPuller::IsInPullScope()) {
-        // 主线程这时正拿着 context 任务锁执行队列任务。UI 操作可能同步触发 ArkUI 事件并再次进入同步事件，因此等这把锁释放后再执行。
-        KRMainThread::RunOnMainThreadForNextLoop(task);
     } else {
+        // 主线程正持有 context 任务锁执行 context 任务时，RunOnMainThread 会改到下一轮主线程循环执行。
         KRMainThread::RunOnMainThread(task);
     }
 }

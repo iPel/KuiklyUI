@@ -27,16 +27,7 @@ namespace {
 // 一轮最多执行 2ms。到时间就把主线程交还事件循环，避免输入一直排队。
 constexpr int64_t kSliceBudgetNs = 2'000'000;
 
-thread_local bool t_in_pull_scope = false;
 std::atomic<uint32_t> g_mainPullTasks{0};
-
-class PullScope {
- public:
-    PullScope() { t_in_pull_scope = true; }
-    ~PullScope() { t_in_pull_scope = false; }
-    PullScope(const PullScope &) = delete;
-    PullScope &operator=(const PullScope &) = delete;
-};
 
 int64_t NowNs() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
@@ -63,10 +54,6 @@ void KRMainThreadTaskPuller::OnSessionActiveChanged(bool active) {
     }
 }
 
-bool KRMainThreadTaskPuller::IsInPullScope() {
-    return t_in_pull_scope;
-}
-
 uint32_t KRMainThreadTaskPuller::ExchangeMainPullTaskCount() {
     return g_mainPullTasks.exchange(0, std::memory_order_relaxed);
 }
@@ -84,30 +71,23 @@ void KRMainThreadTaskPuller::RunSlice() {
         return;
     }
     auto &gate = KRInputFirstGate::GetInstance();
-    bool sliceBudgetExhausted = false;
-    {
-        PullScope scope;
-        const int64_t sliceEndNs = NowNs() + kSliceBudgetNs;
-        while (true) {
-            // 事件已结束，剩下的任务由 context 线程执行。
-            if (!parked_.load()) {
-                break;
-            }
-            if (NowNs() >= sliceEndNs) {
-                gate.RecordPullStop(KRInputFirstGate::PullStop::kSliceBudget);
-                sliceBudgetExhausted = true;
-                break;
-            }
-            // 队列空：暂停期间有新任务会再次通知。拿不到锁：context 线程还在执行进入暂停前的那个任务，
-            // 结束后会把剩余任务放回队首并通知。两种情况都不用在这里重试。
-            if (!KRContextScheduler::TryRunNextContextTaskOnMainThread()) {
-                gate.RecordPullStop(KRInputFirstGate::PullStop::kQueueEmptyOrBusy);
-                break;
-            }
-            g_mainPullTasks.fetch_add(1, std::memory_order_relaxed);
+    const int64_t sliceEndNs = NowNs() + kSliceBudgetNs;
+    while (true) {
+        // 事件已结束，剩下的任务由 context 线程执行。
+        if (!parked_.load()) {
+            return;
         }
-    }
-    if (sliceBudgetExhausted) {
-        ScheduleSlice();
+        if (NowNs() >= sliceEndNs) {
+            gate.RecordPullStop(KRInputFirstGate::PullStop::kSliceBudget);
+            ScheduleSlice();
+            return;
+        }
+        // 队列空：暂停期间有新任务会再次通知。拿不到锁：context 线程还在执行进入暂停前的那个任务，
+        // 结束后会把剩余任务放回队首并通知。两种情况都不用在这里重试。
+        if (!KRContextScheduler::TryRunNextContextTaskOnMainThread()) {
+            gate.RecordPullStop(KRInputFirstGate::PullStop::kQueueEmptyOrBusy);
+            return;
+        }
+        g_mainPullTasks.fetch_add(1, std::memory_order_relaxed);
     }
 }

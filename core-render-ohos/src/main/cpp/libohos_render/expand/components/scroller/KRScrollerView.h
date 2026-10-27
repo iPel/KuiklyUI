@@ -69,7 +69,6 @@ class KRScrollerContentView : public IKRRenderViewExport {
 class KRScrollerView : public IKRRenderViewExport {
  public:
     KRScrollerView() = default;
-    ~KRScrollerView();
     KRScrollerView(const KRScrollerView &) = delete;
     KRScrollerView(KRScrollerView &&) = delete;
     KRScrollerView &operator=(const KRScrollerView &) = delete;
@@ -138,13 +137,13 @@ class KRScrollerView : public IKRRenderViewExport {
     void InnerSetBouncesEnable(bool enable);
     void AdjustHeaderBouncesEnableWhenWillScroll(ArkUI_NodeEvent *event);
     void DispatchDidScrollToObservers(KRPoint point);
-    void ReleaseInputSessions();
+    void EndScrollSession();
     bool SetFlingEnable(bool enable);
     bool SetFlingSpeedLimit(const KRAnyValue &value);
     KRPoint MaxContentOffsetInContentInset(const std::shared_ptr<KRScrollerContentInset> &content_inset);
     bool StartSpringScrollAnimation(float target_x, float target_y, int duration_ms, float velocity_x,
                                     float velocity_y);
-    void CancelSpringScrollAnimation();
+    void CancelSpringScrollAnimation(bool end_session);
     void DisposeSpringScrollAnimator();
     /** 关闭系统内置的"点击状态栏回顶"。节点为空或系统 API < 15 时不设置，保持原有滚动行为。 */
     void DisableSystemBackToTopIfNeed();

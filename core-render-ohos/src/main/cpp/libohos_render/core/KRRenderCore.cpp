@@ -85,14 +85,13 @@ static double InputLatencyMs(const KRAnyValue &res) {
     if (!res) {
         return -1;
     }
-    auto map = res->toMap();
-    auto it = map.find(u"timestamp");
-    if (it == map.end()) {
+    const auto timestamp = res->opt(u"timestamp");
+    if (!timestamp) {
         return -1;
     }
     const double nowMs = std::chrono::duration<double, std::milli>(
                              std::chrono::steady_clock::now().time_since_epoch()).count();
-    return nowMs - it->second->toDouble();
+    return nowMs - timestamp->toDouble();
 }
 
 /**
@@ -365,7 +364,9 @@ KRAnyValue KRRenderCore::PerformNativeCallback(const KuiklyRenderNativeMethod &m
                         return;
                     }
                     auto &gate = KRInputFirstGate::GetInstance();
-                    gate.RecordInput(lockWaitMs, execMs, InputLatencyMs(res));
+                    if (gate.IsInSession()) {
+                        gate.RecordInput(lockWaitMs, execMs, InputLatencyMs(res));
+                    }
                     gate.OnInputDone();
                 };
                 const auto callStart = MetricsNow(continuous);
