@@ -195,6 +195,11 @@ bool KRInputFirstGate::OnVsync(const void *module, int64_t vsyncTimestampNs, std
     return true;
 }
 
+void KRInputFirstGate::DropDeferred(const void *module) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    deferred_.erase(module);
+}
+
 bool KRInputFirstGate::MergeDeferred(const void *module, std::function<void()> dispatch) {
     {
         std::lock_guard<std::mutex> lock(mutex_);

@@ -455,6 +455,10 @@ bool KRThread::TryRunNextPendingTaskOnCurThread(const std::function<void(const s
     return true;
 }
 
+bool KRThread::IsTaskLockHeldByCurrentThread() const {
+    return m_externalOwner.load() == std::this_thread::get_id();
+}
+
 bool KRThread::TryRunOnCurThread(std::chrono::microseconds window, const std::function<void()> &task) {
     if (!task) {
         return true;

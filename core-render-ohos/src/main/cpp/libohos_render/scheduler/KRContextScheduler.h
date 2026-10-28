@@ -53,6 +53,9 @@ class KRContextScheduler {
      */
     static bool TryDirectRunOnMainThread(std::chrono::microseconds window, const KRSchedulerTask &task);
 
+    // 当前线程是否正持有 context 任务锁 m_taskMutex。单线程模式下恒为 false。
+    static bool IsContextTaskLockHeldByCurrentThread();
+
     /**
      * 在主线程上持有 context 任务锁，执行共享队列中的下一个 context 任务。
      * @return 执行了一个任务返回 true；队列为空或没能立刻拿到锁返回 false

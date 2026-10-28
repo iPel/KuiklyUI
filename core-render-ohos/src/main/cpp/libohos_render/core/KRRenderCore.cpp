@@ -389,7 +389,14 @@ KRAnyValue KRRenderCore::PerformNativeCallback(const KuiklyRenderNativeMethod &m
                         finishInput(ElapsedMs(callStart, execStart), ElapsedMs(execStart, MetricsNow(continuous)));
                     });
                 }
-                if (auto locked = weakSelf.lock()) {
+                if (KRContextScheduler::IsContextTaskLockHeldByCurrentThread()) {
+                    // 嵌套进来时外层还拿着 context 任务锁 m_taskMutex。等这把锁释放后的下一轮主线程循环再执行 UI。
+                    KRMainThread::RunOnMainThreadForNextLoop([weakSelf] {
+                        if (auto locked = weakSelf.lock()) {
+                            locked->uiScheduler_->PerformMainThreadTaskWaitToSyncBlockIfNeed();
+                        }
+                    });
+                } else if (auto locked = weakSelf.lock()) {
                     locked->uiScheduler_->PerformMainThreadTaskWaitToSyncBlockIfNeed();
                 }
                 if (ranOnMain) {

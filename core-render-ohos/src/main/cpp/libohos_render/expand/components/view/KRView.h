@@ -59,6 +59,9 @@ class KRView : public IKRRenderViewExport {
     void OnInternalScrollViewDidScroll(float offsetX, float offsetY);
     void UpdateTouchSession(ArkUI_UIInputEvent *input_event, int32_t action);
     void EndTouchSession();
+    void StopTouchPropagation(ArkUI_NodeEvent *event, int32_t action,
+                              const std::vector<std::weak_ptr<KRView>> &ancestors);
+    void ApplyTouchEndFromDescendant(int32_t action);
     void ReleaseInputSessions();
     void EnsureRegisterTouchEvent();
     bool RegisterTouchDownEvent(const KRRenderCallback &event_call_back);

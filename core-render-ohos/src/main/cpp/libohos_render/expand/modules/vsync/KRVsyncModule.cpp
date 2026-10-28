@@ -96,14 +96,17 @@ void KRVsyncModule::RegisterVsync(const KRRenderCallback &callback) {
 }
 
 void KRVsyncModule::UnRegisterVsync() {
-    std::lock_guard<std::mutex> guard(mutex_);
-    running_ = false;
-    callback_ = nullptr;
-    // 代数递增后，在途回调因 generation 不匹配被安全丢弃
-    generation_++;
-    // 释放槽侧引用；若在途回调尚未到达，其引用减法会将计数归零并完成释放
-    ReleaseRequestRef(pending_request_);
-    pending_request_ = nullptr;
+    {
+        std::lock_guard<std::mutex> guard(mutex_);
+        running_ = false;
+        callback_ = nullptr;
+        // 代数递增后，在途回调因 generation 不匹配被安全丢弃
+        generation_++;
+        // 释放槽侧引用；若在途回调尚未到达，其引用减法会将计数归零并完成释放
+        ReleaseRequestRef(pending_request_);
+        pending_request_ = nullptr;
+    }
+    KRInputFirstGate::GetInstance().DropDeferred(this);
 }
 
 // 调用前须持有 mutex_

@@ -83,6 +83,9 @@ class KRInputFirstGate {
      */
     bool MergeDeferred(const void *module, std::function<void()> dispatch);
 
+    // 模块反注册或销毁时丢掉它暂存的帧，不执行。避免同一地址的新模块合并到旧帧。
+    void DropDeferred(const void *module);
+
     /**
      * 记录一次连续同步事件的耗时。只在事件进行期间生效。
      * @param lockWaitMs 等待 context 任务锁的耗时

@@ -1077,8 +1077,13 @@ void KRScrollerView::PrepareForComposeReuse() {
 }
 
 void KRScrollerView::AbortContentOffsetAnimate() {
-    CancelSpringScrollAnimation(true);
-    EndScrollSession();
+    // 手指还在拖时不能结束 scroll 会话。弹簧滚动只在没有拖动时取消并结束会话。
+    CancelSpringScrollAnimation(!is_dragging_);
+    // 正在拖动时 scrollBy(0, 0) 停不住手势，这次滚动还要等 OnScrollStop 结束会话。
+    // 空闲且没有拖动时没有后续的 OnScrollStop，若会话还在就在这里结束。
+    if (!is_dragging_ && current_scroll_state_ == ArkUI_ScrollState::ARKUI_SCROLL_STATE_IDLE) {
+        EndScrollSession();
+    }
     // 停止 ContentInset 动画（释放动画对象）
     if (content_inset_animate_) {
         content_inset_animate_ = nullptr;

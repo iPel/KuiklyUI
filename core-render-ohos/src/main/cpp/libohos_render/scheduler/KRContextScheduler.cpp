@@ -42,6 +42,7 @@ class KRContextSchedulerInternal {
     virtual void SetContextThreadParked(bool parked, const std::function<void()> &notifier) = 0;
 
     virtual bool IsCurrentOnContextThread() = 0;
+    virtual bool IsContextTaskLockHeldByCurrentThread() { return false; }
 };
 
 class KRContextSchedulerMultiThreaded : public KRContextSchedulerInternal {
@@ -53,6 +54,7 @@ class KRContextSchedulerMultiThreaded : public KRContextSchedulerInternal {
     bool TryRunNextContextTaskOnMainThread() override;
     void SetContextThreadParked(bool parked, const std::function<void()> &notifier) override;
     bool IsCurrentOnContextThread() override;
+    bool IsContextTaskLockHeldByCurrentThread() override;
 
  private:
     static KRThread *GetContextThread() {
@@ -100,8 +102,15 @@ bool KRContextSchedulerMultiThreaded::TryDirectRunOnMainThread(std::chrono::micr
                                                               const KRSchedulerTask &task) {
     return GetContextThread()->TryRunOnCurThread(window, [&task]() {
         MainThreadContextGuard ctxGuard;
+        // 同步 UI 提交存在 m_main_thread_task_wait_to_sync_block_，等本函数返回、锁释放后再执行。
+        // 这里只把 delay 为 0 的 RunOnMainThread 推到下一轮，避免在持有 m_taskMutex 的调用栈里做 UI。
+        KRMainThread::RunInNextLoopScope nextLoopScope;
         task();
     });
+}
+
+bool KRContextSchedulerMultiThreaded::IsContextTaskLockHeldByCurrentThread() {
+    return GetContextThread()->IsTaskLockHeldByCurrentThread();
 }
 
 bool KRContextSchedulerMultiThreaded::TryRunNextContextTaskOnMainThread() {
@@ -314,6 +323,10 @@ void KRContextScheduler::DirectRunOnMainThread(bool isSync, const KRSchedulerTas
 }
 bool KRContextScheduler::TryDirectRunOnMainThread(std::chrono::microseconds window, const KRSchedulerTask &task) {
     return GetInstance()->TryDirectRunOnMainThread(window, task);
+}
+
+bool KRContextScheduler::IsContextTaskLockHeldByCurrentThread() {
+    return GetInstance()->IsContextTaskLockHeldByCurrentThread();
 }
 bool KRContextScheduler::TryRunNextContextTaskOnMainThread() {
     return GetInstance()->TryRunNextContextTaskOnMainThread();

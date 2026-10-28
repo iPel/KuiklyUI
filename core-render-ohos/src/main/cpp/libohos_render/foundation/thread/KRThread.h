@@ -65,6 +65,9 @@ class KRThread {
      */
     bool TryRunOnCurThread(std::chrono::microseconds window, const std::function<void()> &task);
 
+    // 当前线程是否正通过 TryRunOnCurThread / TryRunNextPendingTaskOnCurThread 持有 context 任务锁 m_taskMutex。
+    bool IsTaskLockHeldByCurrentThread() const;
+
     // 已经暂停后仍开始执行的任务数。会话开始时清零，会话结束时读出。
     static uint32_t ExchangeTasksStartedWhileParked();
 
