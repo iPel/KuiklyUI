@@ -280,7 +280,7 @@ void KRInputFirstGate::LogMetrics(const Metrics &m) {
         << " frameWaitInput=" << m.frame_wait_input
         << " frameMerged=" << m.frame_merged
         << " inputIdleEntries=" << m.input_idle_entries
-        << " pullSliceBudget=" << m.pull_stops[static_cast<size_t>(PullStop::kSliceBudget)]
+        << " round2msUsedUp=" << m.pull_stops[static_cast<size_t>(PullStop::kRoundTimeUp)]
         << " pullQueueEmptyOrBusy=" << m.pull_stops[static_cast<size_t>(PullStop::kQueueEmptyOrBusy)]
         << " contextTasksWhileParked=" << KRThread::ExchangeTasksStartedWhileParked()
         << " mainPullTasks=" << KRMainThreadTaskPuller::ExchangeMainPullTaskCount();

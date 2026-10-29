@@ -70,9 +70,6 @@ class KRVsyncModule : public IKRRenderModuleExport {
     void WillDestroy() override;
     void OnDestroy() override;
 
-    // 最近一次实测帧间隔（纳秒）。尚无 vsync 时返回 0。
-    static int64_t LatestFrameIntervalNs();
-
  private:
     static const char METHOD_REGISTER_VSYNC[];
     static const char METHOD_UNREGISTER_VSYNC[];

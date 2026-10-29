@@ -37,8 +37,6 @@ namespace {
 constexpr int64_t kMinFrameIntervalNanos = 1'000'000;      // 1ms
 constexpr int64_t kMaxFrameIntervalNanos = 100'000'000;    // 100ms
 
-std::atomic<int64_t> g_latest_frame_interval_ns{0};
-
 }  // namespace
 VsyncRequestContext::VsyncRequestContext(const std::weak_ptr<KRVsyncModule> &weak, uint64_t gen)
     : weak_module(weak), generation(gen) {}
@@ -152,9 +150,6 @@ void KRVsyncModule::OnVsync(long long timestamp, void *data) {
             }
             // 差值越界(首帧后异常/休眠恢复)时沿用上次有效值
             interval_nanos = self->last_interval_nanos_;
-            if (self->last_interval_nanos_ > 0) {
-                g_latest_frame_interval_ns.store(self->last_interval_nanos_, std::memory_order_relaxed);
-            }
         }
         self->last_timestamp_nanos_ = timestamp;
         // RequestFrame 为一次性请求，先重新 arm 下一帧
@@ -212,10 +207,6 @@ void KRVsyncModule::OnVsync(long long timestamp, void *data) {
         dispatch();
     }
     ReleaseRequestRef(context);
-}
-
-int64_t KRVsyncModule::LatestFrameIntervalNs() {
-    return g_latest_frame_interval_ns.load(std::memory_order_relaxed);
 }
 
 }  // namespace module

@@ -30,16 +30,21 @@
  * 顺序是先输入、后帧任务，避免帧任务和同时到达的输入抢同一把 context 任务锁。
  *
  * 一次连续同步事件从 native 的开始标志到结束标志：touch 从首个 DOWN 到最后一个 UP/CANCEL，
- * 滚动从开始到停止，手势从 start 到 end。以 (owner, type) 计数。owner 被移除或销毁时
- * ReleaseSessions 释放它登记的全部事件。不用时间阈值判断开始和结束。
+ * 滚动从开始到停止。以 (owner, type) 计数。owner 被移除或销毁时 ReleaseSessions 释放它登记的全部事件。
+ * 不用时间阈值判断开始和结束。
+ *
+ * 会话从无到有时暂停 context 线程，队列里的 context 任务改由主线程执行，一轮最多 2ms。从有到无时恢复。
  *
  * 帧任务：按 KRVsyncModule 分别暂存，每个模块最多存一帧。事件进行中、本帧输入还没处理完时先存起来，
  * 输入处理完再投递所有模块的暂存。某个模块的下一帧 vsync 到来时它的暂存仍在，就合并成一次投递，
  * 之后到下一次输入之前直接投递。
  *
  * 指标：事件进行期间累计，最后一次事件结束时打一行日志并清零。事件之外不做统计。
+ * execMs 是同步事件回调本身的耗时，不含主线程这一轮里执行 context 任务的时间。
  *
- * 线程：事件开始/结束和输入通知在主线程调用；OnVsync / MergeDeferred 在 vsync 线程调用。
+ * 线程：事件开始和结束在主线程。OnInputBegin / OnInputDone 通常在主线程。没拿到 context 任务锁、
+ * 这一次改成异步执行时，OnInputDone 在执行这次异步任务的线程上：context 线程暂停期间是主线程，
+ * 否则是 context 线程。OnVsync / MergeDeferred 在 vsync 线程。DropDeferred 在调用 UnRegisterVsync 的线程。
  */
 class KRInputFirstGate {
  public:
@@ -51,7 +56,7 @@ class KRInputFirstGate {
 
     // 主线程一轮执行的停止原因。事件结束导致的停止不计入。
     enum class PullStop : uint8_t {
-        kSliceBudget,
+        kRoundTimeUp,
         kQueueEmptyOrBusy,
         kCount,
     };

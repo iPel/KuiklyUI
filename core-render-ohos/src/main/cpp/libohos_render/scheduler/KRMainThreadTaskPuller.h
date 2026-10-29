@@ -29,17 +29,17 @@ class KRMainThreadTaskPuller {
     // 主线程调用：连续同步事件从无到有，或从有到无。
     static void OnSessionActiveChanged(bool active);
 
-    // 本轮会话里主线程实际执行的 context 任务数。读出后清零。
+    // 连续同步事件期间，主线程执行的 context 任务数。读出后清零。
     static uint32_t ExchangeMainPullTaskCount();
 
  private:
     // 任意线程调用。context 线程暂停期间有新任务时由它调用。
-    static void ScheduleSlice();
-    static void RunSlice();
+    static void PostMainThreadRound();
+    static void RunMainThreadRound();
 
     static std::atomic<bool> parked_;
-    // 已经有一轮投递在途时为 true，避免重复投递。
-    static std::atomic<bool> slice_queued_;
+    // 已经投了一轮、还没执行时为 true，避免重复投递。
+    static std::atomic<bool> round_posted_;
 };
 
 #endif  // CORE_RENDER_OHOS_KRMAINTHREADTASKPULLER_H

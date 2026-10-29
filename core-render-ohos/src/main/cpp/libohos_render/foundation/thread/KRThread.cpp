@@ -411,7 +411,7 @@ void KRThread::DirectRunOnCurThread(const std::function<void()> &task) {
 void KRThread::SetParked(bool parked) {
     m_parked.store(parked, std::memory_order_release);
     if (!parked) {
-        // 暂停期间积压的任务交还 context 线程继续执行。
+        // 唤醒 context 线程，从 m_pending 继续执行。
         uv_async_send(&m_async);
     }
 }

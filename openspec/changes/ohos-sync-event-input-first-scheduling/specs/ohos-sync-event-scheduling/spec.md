@@ -90,7 +90,7 @@ HarmonyOS renderer 在连续同步事件期间 SHALL 由主线程执行 context 
 - **WHEN** T1 执行完毕
 - **THEN** T2、T3 SHALL 按原顺序退回共享队列队首，并由主线程按 T2、T3 的顺序执行
 
-#### Scenario: 到 2ms 把主线程交还事件循环
+#### Scenario: 到 2ms 回到事件循环
 - **GIVEN** 连续同步事件期间，共享队列里的任务超过 2ms
 - **WHEN** 主线程执行一轮
 - **THEN** 这一轮 SHALL 在 2ms 用完后回到事件循环，ArkUI SHALL 能在两轮之间分发输入
@@ -134,7 +134,7 @@ HarmonyOS 单线程模式（`KRSetThreadingMode(1)`）下，`KRContextScheduler:
 
 ### Requirement: renderer SHALL 提供连续同步事件调度的 A/B 指标
 
-HarmonyOS renderer SHALL 按一次连续同步事件聚合并通过性能或日志 adapter 输出以下指标：同步事件响应延迟（输入事件时间戳到本次 UI 提交完成，只含带输入时间戳的 touch 类事件）、等待 context 任务锁的时长、事件期间主线程上 Kuikly 的耗时、帧任务投递分类计数（等输入处理完再投递 / 合并下一次 vsync 后投递 / 直接投递）、进入「输入已经空闲」的次数、主线程一轮执行的停止原因计数（2ms 用完 / 队列空或拿不到锁）。事件之外 SHALL 不采集这些指标。
+HarmonyOS renderer SHALL 按一次连续同步事件聚合并通过性能或日志 adapter 输出以下指标：同步事件响应延迟（输入事件时间戳到本次 UI 提交完成，只含带输入时间戳的 touch 类事件）、等待 context 任务锁的时长、同步事件回调本身的耗时（`execMs`，不含主线程执行 context 任务的时间）、帧任务投递分类计数（等输入处理完再投递 / 合并下一次 vsync 后投递 / 直接投递）、进入「输入已经空闲」的次数、主线程一轮执行的停止原因计数（2ms 用完 / 队列空或拿不到锁）。事件之外 SHALL 不采集这些指标。
 
 #### Scenario: 会话结束输出指标
 - **GIVEN** 用户在 HarmonyOS 页面完成一次连续同步拖动

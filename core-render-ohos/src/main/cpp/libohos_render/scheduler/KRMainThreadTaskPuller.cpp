@@ -24,8 +24,8 @@
 
 namespace {
 
-// 一轮最多执行 2ms。到时间就把主线程交还事件循环，避免输入一直排队。
-constexpr int64_t kSliceBudgetNs = 2'000'000;
+// 主线程一轮最多执行 2ms。到时间就回到 ArkUI 事件循环，避免输入一直排队。
+constexpr int64_t kMaxRoundNs = 2'000'000;
 
 std::atomic<uint32_t> g_mainPullTasks{0};
 
@@ -38,7 +38,7 @@ int64_t NowNs() {
 }  // namespace
 
 std::atomic<bool> KRMainThreadTaskPuller::parked_{false};
-std::atomic<bool> KRMainThreadTaskPuller::slice_queued_{false};
+std::atomic<bool> KRMainThreadTaskPuller::round_posted_{false};
 
 void KRMainThreadTaskPuller::OnSessionActiveChanged(bool active) {
     if (active) {
@@ -46,11 +46,11 @@ void KRMainThreadTaskPuller::OnSessionActiveChanged(bool active) {
             return;
         }
         // 暂停 context 线程，并开始在主线程上执行队列里的任务。
-        KRContextScheduler::SetContextThreadParked(true, &KRMainThreadTaskPuller::ScheduleSlice);
-        ScheduleSlice();
+        KRContextScheduler::SetContextThreadParked(true, &KRMainThreadTaskPuller::PostMainThreadRound);
+        PostMainThreadRound();
     } else if (parked_.exchange(false)) {
-        // 恢复 context 线程。已经投出、还没开始的那一轮会在 RunSlice 里直接返回。
-        KRContextScheduler::SetContextThreadParked(false, &KRMainThreadTaskPuller::ScheduleSlice);
+        // 恢复 context 线程。已经投出、还没开始的那一轮会在 RunMainThreadRound 里直接返回。
+        KRContextScheduler::SetContextThreadParked(false, &KRMainThreadTaskPuller::PostMainThreadRound);
     }
 }
 
@@ -58,28 +58,28 @@ uint32_t KRMainThreadTaskPuller::ExchangeMainPullTaskCount() {
     return g_mainPullTasks.exchange(0, std::memory_order_relaxed);
 }
 
-void KRMainThreadTaskPuller::ScheduleSlice() {
-    if (slice_queued_.exchange(true)) {
+void KRMainThreadTaskPuller::PostMainThreadRound() {
+    if (round_posted_.exchange(true)) {
         return;
     }
-    KRMainThread::RunOnMainThreadForNextLoop(&KRMainThreadTaskPuller::RunSlice);
+    KRMainThread::RunOnMainThreadForNextLoop(&KRMainThreadTaskPuller::RunMainThreadRound);
 }
 
-void KRMainThreadTaskPuller::RunSlice() {
-    slice_queued_.store(false);
+void KRMainThreadTaskPuller::RunMainThreadRound() {
+    round_posted_.store(false);
     if (!parked_.load()) {
         return;
     }
     auto &gate = KRInputFirstGate::GetInstance();
-    const int64_t sliceEndNs = NowNs() + kSliceBudgetNs;
+    const int64_t roundEndNs = NowNs() + kMaxRoundNs;
     while (true) {
         // 事件已结束，剩下的任务由 context 线程执行。
         if (!parked_.load()) {
             return;
         }
-        if (NowNs() >= sliceEndNs) {
-            gate.RecordPullStop(KRInputFirstGate::PullStop::kSliceBudget);
-            ScheduleSlice();
+        if (NowNs() >= roundEndNs) {
+            gate.RecordPullStop(KRInputFirstGate::PullStop::kRoundTimeUp);
+            PostMainThreadRound();
             return;
         }
         // 队列空：暂停期间有新任务会再次通知。拿不到锁：context 线程还在执行进入暂停前的那个任务，

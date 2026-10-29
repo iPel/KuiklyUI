@@ -47,7 +47,7 @@ vsync 帧任务（Compose 鸿蒙端经 `VsyncModule` → `KRVsyncModule` → `OH
 
 - 不改线程模型的全局设置方式、不引入按页面线程模型。
 - 不处理 Android / iOS（见"跨端适用性"）。
-- 不切分单个长任务；不提供"等锁超时降级为异步"。
+- 不切分单个长任务。不提供「连续事件等锁超时后整段改成异步」。单次同步调用仍沿用原有的 100ms，超时后这一次改成异步执行。
 - 不改 Compose 同步 touchMove 里谁消费、以及 `preventTouch` 的时序。只把鸿蒙改成和其他平台一样注册同步 touchMove。
 
 ## Decisions
@@ -60,7 +60,7 @@ vsync 帧任务（Compose 鸿蒙端经 `VsyncModule` → `KRVsyncModule` → `OH
 |---|---|---|---|
 | `touchMove` | touch DOWN（首个 pointer） | 最后一个 pointer UP / CANCEL | `KRView` touch 处理 |
 | `scroll` | ArkUI 滚动开始（拖动、惯性、带动画的 contentOffset） | 滚动停止 | `KRScrollerView` scroll start/stop |
-| `pan` / `pinch` / `longPress` | 手势 `state = start` | `state = end` | 手势事件处理（Kotlin 侧当前未开放同步，接口预留） |
+| `pan` / `pinch` / `longPress` | 暂不支持 | 暂不支持 | 没有上报。`SessionType::kGesture` 先留着，支持同步后再接 |
 
 `keyboardHeightChange` 不算连续同步事件。鸿蒙 `KRWindowInfo.ets` 通过 `window.on('keyboardHeightChange')` 在键盘高度变化时推送一次（`durationMs` 写死为 300）。它不是逐帧回调，也没有结束标志，无法从 native 状态判断从哪一帧开始、到哪一帧结束。这个结论来自读代码，还没用真机确认。
 
@@ -105,12 +105,12 @@ context 线程跑一批任务时，每个任务结束后看等待计数。主线
 
 1. **进入**：连续同步事件从无到有时暂停 context 线程（`KRThread::SetParked(true)`）。正在执行的任务做完，然后把剩余任务按原顺序放回 `m_pending` 队首（D2），之后不再执行任务。
 2. **执行**：所有 context 任务（包括这段时间新到的帧任务、定时器、回调）仍进入同一个 `m_pending`。context 线程被唤醒时发现已暂停，就通知主线程再执行一轮。这一轮经 `RunOnMainThreadForNextLoop` 投递，持有和同步事件同一把 context 任务锁，并套上 `MainThreadContextGuard`，按先入先出逐个执行。
-3. **每轮最多 2ms**：2ms 写死，没有配置。到时间就把主线程交还事件循环，让 ArkUI 分发输入和渲染，并投递下一轮。队列空就停。有新任务时由 context 线程再通知。这里没有另一条线程可以交还，所以不按帧设配额，也不预估单个任务要跑多久。到 2ms 只能回到事件循环，下一轮再继续。这和实验里验证过的 `single_budget` 一致。
+3. **每轮最多 2ms**：2ms 写死，没有配置。到时间就回到 ArkUI 事件循环，让 ArkUI 分发输入和渲染，并投递下一轮。队列空就停。有新任务时由 context 线程再通知。主线程执行期间 context 线程已暂停，不按帧设配额，也不预估单个任务要跑多久。到 2ms 只能回到事件循环，下一轮再继续。这和实验里验证过的 `single_budget` 一致。
 4. **退出**：连续同步事件从有到无时恢复 context 线程（`SetParked(false)` 并唤醒）。它从同一个 `m_pending` 继续执行。已经投出去、还没执行的那一轮发现暂停已结束，就直接返回。
 
 **进出不换队列**：全程只有一个先入先出队列和一把锁。进入时最多等 context 线程做完当前这一个任务（和 D2 一样）。退出时不用再加一道屏障，顺序不会乱。
 
-**拿着锁时不能直接执行 UI**：主线程执行的任务里会再投 UI 刷新（`PerformSyncMainQueueTasksBlockIfNeed(false)` → `PerformOnMainQueueWithTask(false)` → `KRMainThread::RunOnMainThread`）。在主线程上会直接执行 UI。UI 可能同步触发 ArkUI 事件，再次进入同步事件。这把锁不能重入，会空转 100ms 然后改成异步。所以这一轮里产生的主线程 UI 任务必须等锁释放后再执行。这段时间内改走 `RunOnMainThreadForNextLoop`。
+**拿着锁时不能直接执行 UI**：主线程执行的任务里会再投 UI 刷新（`PerformSyncMainQueueTasksBlockIfNeed(false)` → `PerformOnMainQueueWithTask(false)` → `KRMainThread::RunOnMainThread`）。在主线程上会直接执行 UI。UI 可能同步触发 ArkUI 事件，再次进入同步事件。这把锁不能重入。主线程拿着锁再次进入 `TryRunOnCurThread` 会直接返回 false，改成异步执行。所以这一轮里产生的主线程 UI 任务必须等锁释放后再执行。这段时间内改走 `RunOnMainThreadForNextLoop`。
 
 **更正记录**：第一版是 context 线程照常执行，主线程按每帧配额从队列取任务。这仍然是两条线程抢同一把锁，比的只是「任务能不能被主线程取走」。真机复测里，主线程几乎每次都因为队列空、或 context 线程拿着锁而停下来（帧任务一投递就被 context 线程取走）。开和关没有差别。现改为事件期间暂停 context 线程。原来的复测结论作废。
 
@@ -132,7 +132,7 @@ context 线程跑一批任务时，每个任务结束后看等待计数。主线
 
 ### D6：指标
 
-按一次连续同步事件汇总，经日志或性能 adapter 上报。响应延迟、等锁、主线程耗时输出 p50 / p90 / max，和实验里的 p50/p90 同一口径。内容：同步事件响应延迟（输入时间戳到 UI 提交，只含 touch）、等锁时长、事件期间主线程上 Kuikly 的耗时、帧任务怎么投递的（等输入处理完 / 合并下一次 vsync / 直接投递）、进入「没有新输入」的次数、主线程执行了几轮以及每轮为什么停。实验分支里的全量统计（`KRSyncEventPerf`、测试页、脚本）不随正式代码合入。
+按一次连续同步事件汇总，经日志或性能 adapter 上报。响应延迟、等锁、同步事件回调耗时输出 p50 / p90 / max，和实验里的 p50/p90 同一口径。内容：同步事件响应延迟（输入时间戳到 UI 提交，只含 touch）、等锁时长、同步事件回调本身的耗时（`execMs`，不含主线程执行 context 任务的时间）、帧任务怎么投递的（等输入处理完 / 合并下一次 vsync / 直接投递）、进入「没有新输入」的次数、主线程一轮执行的停止原因（2ms 用完 / 队列空或拿不到锁）。实验分支里的全量统计（`KRSyncEventPerf`、测试页、脚本）不随正式代码合入。
 
 ### NativeBridge 交互
 
@@ -161,7 +161,7 @@ Android / iOS 作为后续独立 change，在鸿蒙 A/B 结论后决策。
 - `core/KRRenderCore.cpp`：同步连续事件回调前后通知 `KRInputFirstGate`「本帧输入开始 / 处理完成」；记指标。
 - `expand/components/view/KRView.cpp`：注册了同步 `touchMove` 时上报触摸开始和结束（第一根手指 DOWN / 最后一根 UP、CANCEL）；移除或销毁时清掉。
 - `expand/components/scroller/KRScrollerView.cpp`：注册了同步 `scroll` 时上报滚动开始和停止；移除或销毁时清掉。
-- 手势事件处理（`expand/events/`）：`state` 为 start / end 时的上报先留着（`KRInputFirstGate::SessionType::kGesture`）。pan / pinch / longPress 支持同步后再用。
+- `KRInputFirstGate::SessionType::kGesture` 先留着。pan / pinch / longPress 支持同步后再接，这次没有改 `expand/events/`。
 - `scheduler/KRUIScheduler.cpp`：主线程正在执行 context 任务时，产生的 UI 任务等锁释放后再执行。
 - `CMakeLists.txt`：新增源文件。
 
@@ -173,7 +173,7 @@ Android / iOS 作为后续独立 change，在鸿蒙 A/B 结论后决策。
 
 - [帧任务因此晚约 1~2ms；停顿开始时合并一次 vsync，和手指无关的动画在停顿开始时少一帧] → 「没有新输入」之后直接投递，一次停顿最多合并一帧。实验里帧表现没有变差。
 - [结束标志丢了，会一直停留在连续同步事件里] → view 移除或销毁时清掉。即便没清掉，「没有新输入」之后帧任务也会直接投递，只少一帧。
-- [负载接近一帧时，下一次输入仍会撞上帧任务的尾巴] → 单个任务不能从中间切开。事件期间改由主线程分段执行，能减轻这种情况。
+- [负载接近一帧时，下一次输入仍会撞上帧任务的尾巴] → 单个任务不能从中间切开。事件期间改由主线程执行，一轮最多 2ms，能减轻这种情况。
 - [不经 vsync 的长任务仍会让人等锁] → 只能保证等到当前这一个任务结束。更长的任务要业务自己拆开。
 - [context 任务里的阻塞 IO 会在手势期间堵住主线程] → 2ms 只在任务之间生效，切不开一个正在执行的阻塞任务。要在验证里看。有问题的模块应改成异步。
 - [事件期间主线程承担全部 context 任务，复杂页面可能掉帧] → 每轮最多 2ms，ArkUI 能在两轮之间分发输入和渲染。2026-10-12 复杂 Compose 列表（200 行、50ms 定时器、拖拽和快速滚动，120Hz）上，同步 touchMove 和主线程执行一起生效时，手势期间上屏仍是 120Hz，没有超过 2 帧的间隔。只开同步 touchMove、context 任务仍留在 context 线程时，滚动等锁 p90 为 10.4ms，延迟 p90 为 21.4ms。两者一起时降到 0.008ms / 11.1ms。
@@ -183,11 +183,10 @@ Android / iOS 作为后续独立 change，在鸿蒙 A/B 结论后决策。
 
 ## Migration Plan
 
-1. 先合入 D4（独立 bug fix）。
-2. 合入 D0 + D1 + D2（默认开启），在鸿蒙 demo 与内部业务回归：同步 touch/scroll/键盘高度、多指与多会话并存、Compose 帧动画（含手指停顿时的独立动画）、canvas、列表懒加载。
-3. 合入「事件期间由主线程执行 context 任务」和鸿蒙 Compose 的同步 touchMove。复杂页的数据见 D6 和上面的风险：两件事要一起上。只改同步 touchMove、任务仍留在 context 线程，滚动等锁会留在约 10ms。
-4. 回滚靠版本回退。
+这次一次合入，没有单独的关闭方式。回滚靠版本回退。
+
+回归：同步 touch / scroll、键盘高度、多指与 touch + scroll 并存、手指停顿时的独立动画、页面销毁时丢掉暂存帧。复杂页的数据见上面的风险。只改同步 touchMove、任务仍留在 context 线程时，滚动等锁会留在约 10ms，所以这两件事一起上。
 
 ## Open Questions
 
-- 是否需要识别并排除执行阻塞 IO 的 native 模块任务。D3 默认开启后，这类任务会在同步手势期间阻塞主线程。
+- 是否需要识别并排除执行阻塞 IO 的 native 模块任务。这些行为没有开关，这类任务会在连续同步事件期间堵在主线程上。

@@ -30,7 +30,6 @@
 - [x] 4.5 `KRRenderCore`：同步连续事件回调前通知"本帧输入开始"，Kotlin 回调与同步 UI 提交完成后通知"本帧输入处理完成"
 - [x] 4.6 `KRInputFirstGate` 帧任务状态机：不在会话 / 本帧输入已处理 / 输入空闲 → 立即投递；否则暂存，输入处理完成时投递；下一 vsync 到达仍暂存则合并投递并进入输入空闲；下一次输入开始退出输入空闲；无任何时间阈值
 - [x] 4.7 `KRVsyncModule::OnVsync`：一帧的投递交给 `KRInputFirstGate`。有暂存时，新的 vsync 从「丢掉」改为「合并后投递」。真正执行时再检查 running 和 generation
-- [x] 4.8 `KRVsyncModule`：暴露最近 vsync 时间戳与实测帧间隔（供第 5 组配额计算）
 - [x] 4.9 HarmonyOS 真机验证：Compose vsync 负载下同步 touchMove 等锁 p90 显著下降；手指停顿时帧节拍不减半、独立动画至多停顿开始时损失一帧；多指与 touch + scroll 并存的会话边界正确；手势中途移除 view 会话被释放；页面销毁时暂存投递被安全丢弃
     - 2026-10-09 部分完成（设备 2LQ0223A26007226，debug 包，SyncEventPerfPages 4ms/帧 vsync 负载，uitest 模拟）：touch / scroll 会话边界正确（含惯性）；等锁 p90 ≈ 0.013ms，响应延迟 p50/p90 ≈ 11.8/13.1ms；长按停顿仅合并 1 帧后进入输入空闲（frameDirect=180），帧节拍不减半；无断言。未测：多指、touch+scroll 并存、手势中途移除 view、销毁时暂存丢弃、Compose 页面
   - 2026-10-27 部分完成（同一设备，debug Kotlin，uitest）。`SyncComposePerfPage` 每帧 4ms 负载：拖动等锁 p90 0.009ms，延迟 p50/p90 11.1/12.5ms，`mainPullTasks=958`，`contextTasksWhileParked=0`；长按 `inputs=0`、`frameMerged=1`、`frameDirect=171`。手势中途移除 view：`removed` 与会话日志同一时刻打出，随后任务回到 context 线程。合成帧间隔中位数 8.34ms。未测：多指、touch 与 scroll 同时存在。强制停止进程时没有崩溃日志，但不能证明暂存的帧任务被丢掉。
@@ -54,13 +53,13 @@
     - `KRSetThreadingMode(1)`，8ms 拆 8 个：`threadingMode=single`，`mainPullTasks=0`，延迟 13.47/18.52、13.61/18.20、13.57/18.28。对照「全局单线程」16.7/25.5，以及「每轮最多 2ms」10.1/11.1。这个开关是前者，主线程拉取不会在单线程模式里执行。
     - 合成帧间隔中位数都是 8.34ms。一次采集里超过 12ms 的间隔是 0–4 个，没有连续掉帧。`contextTasksWhileParked=0`，hilog 没有 `DispatchAsync when run sync event`。4ms/8ms 单任务页 `fifoBreaks` 最大 3，拆分负载是 0。
     - 以下为初版 D3（worker 照常执行、主线程按每帧配额拉取）的复测记录，因设计有误已作废，仅供参考：
-      - 2026-10-09 部分完成：开关关闭时行为与第 4 组一致；开启（`--pi krTaskPull 1`）后无崩溃、无重入断言，但"每帧一个大任务"负载下切片全部以 QueueEmptyOrBusy 停止（每会话约 200 次，拉到 0 个任务）——帧任务投递后 worker 立即取走并持锁执行，单次 try_lock 拿不到。需用 loadMode 2（拆分小任务）复测后再评估 D3 价值
+      - 2026-10-09 部分完成：开关关闭时行为与第 4 组一致；开启（`--pi krTaskPull 1`）后无崩溃、无重入断言，但"每帧一个大任务"负载下，主线程每一轮都因队列空或拿不到锁停止（每会话约 200 次，执行到 0 个任务）——帧任务投递后 worker 立即取走并持锁执行，单次 try_lock 拿不到。需用 loadMode 2（拆分小任务）复测后再评估 D3 价值
       - 2026-10-09 loadMode 2 复测（`--pi krLoadMs 4 --pi krLoadMode 2`，三轮拖动，`krLoadMs`/`krLoadMode` 已确认透传到 pageData.params）：开关关（`krTaskPull 0`）与开（`krTaskPull 1`）的 touchMove 延迟无可测差异（p50 约 11.1–11.5ms，p90 约 11.8–13.3ms）；开启时 `pullSliceBudget` / `pullFrameQuota` / `pullPredictedCost` 均为 0，`pullQueueEmptyOrBusy` 约等于每次输入（每会话约 140，与 loadMode 0 时同形），即每次输入时要么队列已空、要么 worker 持锁，计数器无法区分二者。结论：在当前负载与交互下 D3 未见收益，保持默认关闭；D3 的有效场景（同步事件到达时主线程队列仍有积压且 worker 空闲）未覆盖，需另行构造后再决定是否默认开启
       - 2026-10-09 复杂列表 Compose 页复测（`SyncComplexComposePerfPage`：200 行、50ms 定时器刷新 40 行、手柄竖向拖拽排序；帧由 ComposeContainer vsync 驱动；拖拽 touchMove 为同步，仅在实验期间本地临时打开 `SuperTouchManager.useSyncMove`，已恢复，未提交）：开关关与开的 latency p50 中位数均为 11.7ms，p90 中位数 21.6 / 21.6ms；lockWait p90 中位数 3.25ms（关）对 3.84ms（开），开启时略差；`pullPredictedCost=2144`、`pullQueueEmptyOrBusy=4238`、`pullSliceBudget=1`、`pullFrameQuota=4`。结论：该负载下 D3 无收益，保持默认关闭。鸿蒙 Compose 同步 move 仍按设计保持关闭（`useSyncMove = !isOhOs`）
 
 ## 6. renderer：A/B 指标（D6）
 
-- [x] 6.1 按会话聚合：响应延迟、等锁、会话期间主线程 Kuikly 耗时、帧任务投递分类计数（等待输入 / 合并 vsync / 直接投递）、进入输入空闲次数、切片次数与停止原因
+- [x] 6.1 按会话聚合：响应延迟、等锁、同步事件回调本身的耗时（`execMs`）、帧任务投递分类计数（等待输入 / 合并 vsync / 直接投递）、进入输入空闲次数、主线程一轮执行的停止原因
 - [x] 6.2 经性能/日志 adapter 输出；会话之外零开销路径
 - [x] 6.3 校验指标与实验分支 bench 结果口径一致（已按代码核对：响应延迟 = 输入时间戳 → UI 提交完成，等锁与主线程耗时同口径，统计为 p50/p90/max；差异：实验按"空闲 2.5s 一轮"汇总，本实现按会话汇总）
 
